@@ -1,0 +1,170 @@
+name: E2E
+
+# Três formas de disparo:
+# - push/PR neste repo: testa main/HEAD dos dois lados (ex.: mudou o
+#   docker-compose.yml aqui).
+# - repository_dispatch "front-published"/"api-published": disparado pelo CI
+#   do front ou da API logo depois de publicar uma imagem no GHCR, testando
+#   exatamente o SHA/tag que acabou de ser publicado (build once, promote
+#   everywhere — nunca rebuilda pra produção aqui, só valida e promove o que
+#   já foi buildado nos repos de origem).
+# - workflow_dispatch manual, com os mesmos parâmetros pra reproduzir um
+#   cenário específico.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      front_ref:
+        description: "Branch/SHA do front a testar"
+        required: false
+        default: main
+      api_image_tag:
+        description: "Tag da imagem da API (GHCR) a testar"
+        required: false
+        default: latest
+  repository_dispatch:
+    types: [front-published, api-published]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout orquestrador
+        uses: actions/checkout@v4
+
+      - name: Resolver parâmetros do trigger
+        id: params
+        # Valores de client_payload chegam via env, não interpolados direto
+        # no run: — evita que um payload malformado seja lido como shell.
+        env:
+          DISPATCH_SHA: ${{ github.event.client_payload.sha }}
+          DISPATCH_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          INPUT_FRONT_REF: ${{ inputs.front_ref }}
+          INPUT_API_IMAGE_TAG: ${{ inputs.api_image_tag }}
+        run: |
+          case "${{ github.event_name }}" in
+            repository_dispatch)
+              if [ "${{ github.event.action }}" = "front-published" ]; then
+                echo "front_ref=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
+                echo "api_image_tag=latest" >> "$GITHUB_OUTPUT"
+              else
+                echo "front_ref=main" >> "$GITHUB_OUTPUT"
+                echo "api_image_tag=$DISPATCH_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            workflow_dispatch)
+              echo "front_ref=$INPUT_FRONT_REF" >> "$GITHUB_OUTPUT"
+              echo "api_image_tag=$INPUT_API_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "front_ref=main" >> "$GITHUB_OUTPUT"
+              echo "api_image_tag=latest" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      # Os specs do Cypress vivem no repo do front, não aqui.
+      - name: Checkout front (no ref sendo testado)
+        uses: actions/checkout@v4
+        with:
+          repository: gbrlmzl/sistema-controle-despesas-front
+          ref: ${{ steps.params.outputs.front_ref }}
+          path: front
+
+      - name: Gerar .env efêmero (só para este job)
+        run: |
+          cat <<EOF > .env
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=sistema_despesas_e2e
+          JWT_SECRET=$(openssl rand -hex 32)
+          API_IMAGE_TAG=${{ steps.params.outputs.api_image_tag }}
+          EOF
+
+      # O pacote ghcr.io/gbrlmzl/sistema-controle-despesas-api é privado — sem
+      # login, o "docker compose up" abaixo falha ao puxar a imagem da api/
+      # migrate com "unauthorized". Reaproveita o mesmo PAT do job promote
+      # (write:packages já cobre leitura).
+      - name: Login no GHCR (imagem da API é privada)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PROMOTE_TOKEN }}
+
+      - name: Subir a stack (postgres + api + front) e aguardar health
+        env:
+          FRONT_CONTEXT: ./front
+        run: docker compose up -d --build --wait
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+
+      - name: Instalar dependências do front (para rodar o Cypress)
+        working-directory: front
+        run: npm ci
+
+      - name: Rodar os specs E2E contra a stack orquestrada
+        working-directory: front
+        run: npx cypress run --config baseUrl=http://localhost:3000
+
+      - name: Logs da stack (se algo falhar)
+        if: failure()
+        run: docker compose logs
+
+      - name: Derrubar a stack
+        if: always()
+        run: docker compose down -v
+
+  promote:
+    name: Promover artefato testado
+    needs: e2e
+    # Só faz sentido "promover" quando o gatilho foi a publicação de um
+    # artefato específico (front ou API). Em push/PR/workflow_dispatch
+    # manual não há um artefato recém-publicado pra marcar como validado.
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      # GITHUB_TOKEN só tem permissão sobre pacotes deste repo — promover
+      # imagens publicadas em ghcr.io/gbrlmzl/sistema-controle-despesas-front
+      # e .../sistema-controle-despesas-api exige um PAT com write:packages
+      # nesses dois repos, guardado aqui como GHCR_PROMOTE_TOKEN.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PROMOTE_TOKEN }}
+
+      # imagetools create só re-taggeia o manifesto já publicado (sem baixar
+      # e reenviar camadas) — é exatamente o mesmo artefato que passou no e2e.
+      - name: Promover imagem da API (tag testada -> :stable)
+        if: github.event.action == 'api-published'
+        env:
+          IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/gbrlmzl/sistema-controle-despesas-api:stable \
+            "ghcr.io/gbrlmzl/sistema-controle-despesas-api:$IMAGE_TAG"
+
+      - name: Promover imagem do front (tag testada -> :stable)
+        if: github.event.action == 'front-published'
+        env:
+          IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/gbrlmzl/sistema-controle-despesas-front:stable \
+            "ghcr.io/gbrlmzl/sistema-controle-despesas-front:$IMAGE_TAG"

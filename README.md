@@ -1,4 +1,4 @@
-# sistema-controle-despesas-e2e
+# sistema-controle-despesas-deploy
 
 Repositório orquestrador dos testes end-to-end do [CRONOS](https://github.com/gbrlmzl/sistema-controle-despesas-front). Não contém código de aplicação nem specs de teste — só o `docker-compose.yml` que sobe o sistema completo (Postgres + API + front) e o workflow que roda os testes Cypress contra essa stack.
 
@@ -33,7 +33,7 @@ Pré-requisito: este repositório precisa estar clonado como **irmão** de `sist
 ```
 Projetos/
 ├── sistema-controle-despesas-front/
-└── sistema-controle-despesas-e2e/   (este repo)
+└── sistema-controle-despesas-deploy/   (este repo)
 ```
 
 ```bash
@@ -52,20 +52,41 @@ npx cypress run --config baseUrl=http://localhost:3000
 Pra derrubar tudo:
 
 ```bash
-cd ../sistema-controle-despesas-e2e
+cd ../sistema-controle-despesas-deploy
 docker compose down -v
 ```
 
 ## CI
 
-O workflow [`.github/workflows/e2e.yml`](.github/workflows/e2e.yml):
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) segue o padrão **build once, promote everywhere**: nunca builda artefato de produção aqui — o front e a API já se buildam e se publicam sozinhos (GHCR) nos próprios CIs. Este repo só valida a combinação via e2e e, se passar, promove exatamente o artefato testado.
 
-1. Faz checkout deste repositório e do front (numa subpasta `front/`).
-2. Gera um `JWT_SECRET` efêmero e sobe a stack (`docker compose up -d --build --wait`), com `FRONT_CONTEXT=./front`.
-3. Instala as dependências do front e roda `npx cypress run` contra `http://localhost:3000`.
-4. Derruba a stack ao final (`always()`), publicando os logs dos containers se algo falhar.
+### Job `e2e`
 
-Disparado em push/PR para `main` e manualmente via `workflow_dispatch`.
+1. Resolve os parâmetros do teste (`front_ref` e `api_image_tag`) a partir do tipo de disparo — ver tabela abaixo.
+2. Faz checkout deste repositório e do front no ref resolvido (subpasta `front/`).
+3. Faz login no GHCR — o pacote `sistema-controle-despesas-api` é **privado**, então sem login o `docker compose up` abaixo falha ao puxar a imagem (`unauthorized`). Usa o mesmo `GHCR_PROMOTE_TOKEN` do job `promote`.
+4. Gera um `JWT_SECRET` efêmero e sobe a stack (`docker compose up -d --build --wait`), com `FRONT_CONTEXT=./front` e `API_IMAGE_TAG` resolvido.
+5. Instala as dependências do front e roda `npx cypress run` contra `http://localhost:3000`.
+6. Derruba a stack ao final (`always()`), publicando os logs dos containers se algo falhar.
+
+### Job `promote`
+
+Roda só quando o disparo foi um `repository_dispatch` (ou seja, quando existe um artefato específico recém-publicado a validar) e o `e2e` passou. Re-taggeia (`docker buildx imagetools create`, sem rebuild) a imagem testada como `:stable` no GHCR do repo correspondente (front ou API) — é o sinal de "este SHA passou no e2e do sistema completo".
+
+### Secret `GHCR_PROMOTE_TOKEN`
+
+Usado nos jobs `e2e` (pull da imagem privada da API) e `promote` (push da tag `:stable`). Precisa ser um PAT com `write:packages` sobre os pacotes de `sistema-controle-despesas-front` **e** `sistema-controle-despesas-api` (o escopo de escrita já cobre leitura — o `GITHUB_TOKEN` padrão não serve porque só tem permissão sobre pacotes deste repo).
+
+### Formas de disparo
+
+| Disparo | `front_ref` | `api_image_tag` | Quando usar |
+|---|---|---|---|
+| `push`/`pull_request` neste repo | `main` | `latest` | Mudou algo aqui (ex.: `docker-compose.yml`) |
+| `repository_dispatch: front-published` | SHA recém-publicado (`client_payload.sha`) | `latest` | CI do front acabou de publicar uma imagem |
+| `repository_dispatch: api-published` | `main` | tag recém-publicada (`client_payload.image_tag`) | CI da API acabou de publicar uma imagem |
+| `workflow_dispatch` manual | input `front_ref` | input `api_image_tag` | Reproduzir/depurar um cenário específico |
+
+Os CIs do front e da API disparam um `repository_dispatch` contra este repo (`gbrlmzl/sistema-controle-despesas-deploy`) logo depois de publicar no GHCR, enviando o payload esperado (`sha` + `image_tag` para o front; `image_tag` para a API). Isso exige um secret `DEPLOY_DISPATCH_TOKEN` (PAT com escopo `repo` sobre este repositório) configurado nos repos do front e da API.
 
 ## Variáveis de ambiente
 
