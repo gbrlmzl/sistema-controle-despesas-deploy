@@ -1,0 +1,60 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout orquestrador
+        uses: actions/checkout@v4
+
+      # Os specs do Cypress vivem no repo do front, não aqui.
+      - name: Checkout front
+        uses: actions/checkout@v4
+        with:
+          repository: gbrlmzl/sistema-controle-despesas-front
+          path: front
+
+      - name: Gerar .env efêmero (só para este job)
+        run: |
+          cat <<EOF > .env
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=sistema_despesas_e2e
+          JWT_SECRET=$(openssl rand -hex 32)
+          API_IMAGE_TAG=latest
+          EOF
+
+      - name: Subir a stack (postgres + api + front) e aguardar health
+        env:
+          FRONT_CONTEXT: ./front
+        run: docker compose up -d --build --wait
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+
+      - name: Instalar dependências do front (para rodar o Cypress)
+        working-directory: front
+        run: npm ci
+
+      - name: Rodar os specs E2E contra a stack orquestrada
+        working-directory: front
+        run: npx cypress run --config baseUrl=http://localhost:3000
+
+      - name: Logs da stack (se algo falhar)
+        if: failure()
+        run: docker compose logs
+
+      - name: Derrubar a stack
+        if: always()
+        run: docker compose down -v

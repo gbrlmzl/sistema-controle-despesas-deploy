@@ -1,0 +1,78 @@
+# Orquestra Postgres + API + front pra rodar os testes E2E (Cypress) contra o
+# sistema completo. Os specs continuam vivendo no repo do front
+# (sistema-controle-despesas-front/cypress) — este repositório só monta o
+# ambiente onde eles rodam, não duplica código de teste.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sistema_despesas_e2e}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sistema_despesas_e2e}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Aplica as migrations uma vez e sai — mesmo padrão já usado no próprio
+  # repo da API (nem a API nem o front devem migrar sozinhos ao subir).
+  migrate:
+    image: ${API_IMAGE:-ghcr.io/gbrlmzl/sistema-controle-despesas-api}:${API_IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sistema_despesas_e2e}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Imagem publicada pelo CI do próprio repo da API (ghcr.io) — não builda a
+  # API a partir de código-fonte aqui, só consome o artefato já testado lá.
+  api:
+    image: ${API_IMAGE:-ghcr.io/gbrlmzl/sistema-controle-despesas-api}:${API_IMAGE_TAG:-latest}
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sistema_despesas_e2e}
+      FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (mínimo 32 caracteres) — ver .env.example}
+      JWT_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 7d
+    ports:
+      - "3001:3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # Buildada a partir do código-fonte (não da imagem publicada no GHCR): o
+  # Next.js resolve o destino do rewrite /api/* -> API_URL em build-time (ver
+  # comentário no Dockerfile do front), então a imagem publicada carrega um
+  # placeholder que não aponta pro serviço "api" desta rede. Builda aqui,
+  # apontando pro host certo, é a única forma de o proxy funcionar de verdade.
+  front:
+    build:
+      context: ${FRONT_CONTEXT:-../sistema-controle-despesas-front}
+      args:
+        API_URL: http://api:3001
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
