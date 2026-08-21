@@ -1,0 +1,239 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1300" viewBox="0 0 1440 1300" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+    </marker>
+    <style>
+      .h1   { font-size: 25px; font-weight: 700; fill: #0f172a; }
+      .sub  { font-size: 13px;  fill: #5b6472; }
+      .plbl { font-size: 13px; font-weight: 700; fill: #0f172a; letter-spacing: .4px; }
+      .sect { font-size: 12px; font-weight: 700; fill: #334155; }
+      .bt   { font-size: 12.5px; font-weight: 700; fill: #0f172a; }
+      .bl   { font-size: 10.2px; fill: #475569; }
+      .mono { font-size: 10px; fill: #475569; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .alab { font-size: 10px; fill: #64748b; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .note { font-size: 11px; fill: #475569; }
+      .warn { font-size: 10.6px; fill: #92400e; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1300" fill="#ffffff"/>
+
+  <!-- ============ HEADER ============ -->
+  <text class="h1" x="40" y="46">CRONOS — Docker &amp; Arquitetura de Deploy</text>
+  <text class="sub" x="40" y="70">Três repositórios independentes: <tspan font-weight="700" fill="#2563eb">-api</tspan> (imagem de produção) · <tspan font-weight="700" fill="#7c3aed">-front</tspan> (imagem + proxy same-origin) · <tspan font-weight="700" fill="#0f766e">-deploy</tspan> (orquestração dos testes E2E)</text>
+
+  <!-- ============ PANEL A — BUILD ============ -->
+  <rect x="40" y="96" width="1360" height="344" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="96" width="5" height="344" rx="2.5" fill="#94a3b8"/>
+  <text class="plbl" x="64" y="126">1 · BUILD — o que cada Dockerfile produz</text>
+
+  <line x1="742" y1="146" x2="742" y2="418" stroke="#dbe1ea" stroke-width="1"/>
+
+  <!-- API multi-stage -->
+  <text class="sect" x="72" y="164" fill="#2563eb">sistema-controle-despesas-api / Dockerfile — multi-stage (4 estágios)</text>
+
+  <rect x="72" y="180" width="164" height="76" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="84" y="199">deps</text>
+  <text class="mono" x="84" y="215">node:24-bookworm-slim</text>
+  <text class="bl" x="84" y="230">apt: openssl (Prisma)</text>
+  <text class="bl" x="84" y="245">npm ci — dev + prod</text>
+
+  <rect x="272" y="180" width="164" height="76" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="284" y="199">build</text>
+  <text class="mono" x="284" y="215">FROM deps</text>
+  <text class="bl" x="284" y="230">prisma generate</text>
+  <text class="bl" x="284" y="245">tsc → /app/dist</text>
+
+  <rect x="72" y="302" width="164" height="76" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="84" y="321">prod-deps</text>
+  <text class="mono" x="84" y="337">node:24-bookworm-slim</text>
+  <text class="bl" x="84" y="352">npm ci --omit=dev</text>
+  <text class="bl" x="84" y="367">(node_modules enxuto)</text>
+
+  <rect x="520" y="204" width="204" height="150" rx="7" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+  <text class="bt" x="532" y="223">runtime  ← imagem final</text>
+  <text class="bl" x="532" y="240">NODE_ENV=production</text>
+  <text class="bl" x="532" y="255">apt: openssl</text>
+  <text class="mono" x="532" y="271">COPY --from=build /app/dist</text>
+  <text class="mono" x="532" y="286">COPY --from=prod-deps</text>
+  <text class="mono" x="532" y="299">      node_modules  (--chown)</text>
+  <text class="bl" x="532" y="315">prisma/ + prisma.config.ts</text>
+  <text class="bl" x="532" y="330">USER node · EXPOSE 8080</text>
+  <text class="bl" x="532" y="345">HEALTHCHECK GET /health</text>
+
+  <path d="M236,218 H272" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#arrowBlue)"/>
+  <text class="alab" x="240" y="211" fill="#2563eb">FROM</text>
+
+  <path d="M436,218 H478 V262 H520" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#arrowBlue)"/>
+  <text class="alab" x="444" y="211" fill="#2563eb">dist/</text>
+
+  <path d="M236,340 H478 V300 H520" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#arrowBlue)"/>
+  <text class="alab" x="252" y="334" fill="#2563eb">node_modules de produção</text>
+
+  <text class="warn" x="72" y="400">O compose da API também usa o estágio <tspan font-family="ui-monospace, Consolas, monospace">build</tspan> diretamente (serviços <tspan font-family="ui-monospace, Consolas, monospace">migrate</tspan> e <tspan font-family="ui-monospace, Consolas, monospace">api-dev</tspan>) — o estágio <tspan font-family="ui-monospace, Consolas, monospace">runtime</tspan> é só do perfil <tspan font-family="ui-monospace, Consolas, monospace">prod</tspan>.</text>
+
+  <!-- FRONT dockerfiles -->
+  <text class="sect" x="766" y="164" fill="#7c3aed">sistema-controle-despesas-front — dois Dockerfiles, single-stage</text>
+
+  <rect x="766" y="180" width="300" height="124" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="778" y="199">Dockerfile  (produção)</text>
+  <text class="mono" x="778" y="216">FROM node:24  ·  WORKDIR /app-node</text>
+  <text class="bl" x="778" y="232">npm install  (camada cacheada)</text>
+  <text class="bl" x="778" y="247">COPY . .   →   EXPOSE 3000</text>
+  <text class="mono" x="778" y="264">ARG API_URL=http://localhost:8080</text>
+  <text class="bl" x="778" y="280">RUN npm run build  ← congela o rewrite</text>
+  <text class="mono" x="778" y="296">ENTRYPOINT ["npm","start"]</text>
+
+  <rect x="1086" y="180" width="284" height="124" rx="7" fill="#faf5ff" stroke="#a78bfa" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text class="bt" x="1098" y="199">Dockerfile.dev  (desenvolvimento)</text>
+  <text class="mono" x="1098" y="216">FROM node:24  ·  WORKDIR /app-node</text>
+  <text class="bl" x="1098" y="232">npm install — só baseline de cache</text>
+  <text class="bl" x="1098" y="247">sem build de produção</text>
+  <text class="bl" x="1098" y="263">sem ENTRYPOINT / CMD</text>
+  <text class="bl" x="1098" y="279">EXPOSE 3000</text>
+  <text class="bl" x="1098" y="295">o comando vem do docker-compose</text>
+
+  <rect x="766" y="320" width="604" height="72" rx="7" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.2"/>
+  <text class="warn" x="780" y="341" font-weight="700">API_URL é build-time, não runtime.</text>
+  <text class="warn" x="780" y="357">O Next resolve o destino do rewrite /api/* → API_URL dentro do routes-manifest.json durante</text>
+  <text class="warn" x="780" y="372">o build. Apontar para outra API exige <tspan font-weight="700">rebuild</tspan> — é por isso que o repo -deploy builda o front do</text>
+  <text class="warn" x="780" y="387">código-fonte em vez de consumir a imagem publicada no GHCR.</text>
+
+  <!-- ============ PANEL B — RUNTIME ============ -->
+  <rect x="40" y="460" width="1360" height="308" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="460" width="5" height="308" rx="2.5" fill="#0f766e"/>
+  <text class="plbl" x="64" y="490">2 · RUNTIME — a stack que o docker-compose sobe (rede interna do compose, DNS por nome de serviço)</text>
+
+  <rect x="72" y="546" width="160" height="94" rx="7" fill="#ffffff" stroke="#94a3b8" stroke-width="1.3"/>
+  <text class="bt" x="84" y="570">navegador</text>
+  <text class="bl" x="84" y="588">fala só com a origem</text>
+  <text class="bl" x="84" y="603">do front (same-origin)</text>
+  <text class="bl" x="84" y="622">cookies JWT + refresh</text>
+
+  <rect x="302" y="546" width="228" height="94" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.8"/>
+  <text class="bt" x="314" y="570">front  ·  :3000</text>
+  <text class="bl" x="314" y="588">Next.js — next start</text>
+  <text class="bl" x="314" y="603">rewrite /api/:path* como proxy</text>
+  <text class="bl" x="314" y="622">healthcheck via compose (HTTP)</text>
+
+  <rect x="662" y="546" width="228" height="94" rx="7" fill="#eff6ff" stroke="#1d4ed8" stroke-width="1.8"/>
+  <text class="bt" x="674" y="570">api  ·  :8080</text>
+  <text class="bl" x="674" y="588">Express 5 + Prisma (USER node)</text>
+  <text class="bl" x="674" y="603">JWT_SECRET · CORS FRONTEND_URL</text>
+  <text class="bl" x="674" y="622">HEALTHCHECK GET /health</text>
+
+  <rect x="1022" y="546" width="200" height="94" rx="7" fill="#fff7ed" stroke="#b45309" stroke-width="1.8"/>
+  <text class="bt" x="1034" y="570">postgres  ·  :5432</text>
+  <text class="bl" x="1034" y="588">postgres:17-alpine</text>
+  <text class="bl" x="1034" y="603">healthcheck pg_isready</text>
+  <text class="bl" x="1034" y="622">volume nomeado só na API</text>
+
+  <path d="M232,593 H302" stroke="#6b7280" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <text class="alab" x="228" y="584">http :3000</text>
+
+  <path d="M530,593 H662" stroke="#6b7280" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <text class="alab" x="596" y="580" text-anchor="middle">/api/* → api:8080</text>
+  <text class="alab" x="596" y="616" text-anchor="middle">server-side</text>
+
+  <path d="M890,593 H1022" stroke="#6b7280" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+  <text class="alab" x="956" y="580" text-anchor="middle">DATABASE_URL</text>
+  <text class="alab" x="956" y="616" text-anchor="middle">postgres:5432</text>
+
+  <rect x="662" y="682" width="228" height="60" rx="7" fill="#ecfdf5" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="6 3"/>
+  <text class="bt" x="674" y="702">migrate  (one-shot)</text>
+  <text class="mono" x="674" y="719">npx prisma migrate deploy</text>
+  <text class="bl" x="674" y="734">roda uma vez, sai com 0</text>
+
+  <path d="M890,712 H1122 V644" stroke="#0f766e" stroke-width="1.5" fill="none" stroke-dasharray="6 3" marker-end="url(#arrowTeal)"/>
+  <path d="M776,682 V644" stroke="#0f766e" stroke-width="1.5" fill="none" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="654" y="700" text-anchor="end" fill="#0f766e">depends_on: service_completed_successfully</text>
+  <text class="alab" x="654" y="716" text-anchor="end" fill="#0f766e">nem a API nem o front migram sozinhos</text>
+
+  <text class="note" x="72" y="668" fill="#64748b">Cadeia de dependência:  postgres (healthy)  →  migrate (exited 0)  →  api (healthy)  →  front</text>
+
+  <!-- ============ PANEL C — CI/CD ============ -->
+  <rect x="40" y="788" width="1360" height="470" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="788" width="5" height="470" rx="2.5" fill="#b45309"/>
+  <text class="plbl" x="64" y="818">3 · CI/CD — build once, promote everywhere</text>
+
+  <rect x="72" y="846" width="182" height="80" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="84" y="868">CI do front</text>
+  <text class="bl" x="84" y="885">push em main / dev/**</text>
+  <text class="bl" x="84" y="901">eslint · jest --coverage</text>
+  <text class="bl" x="84" y="917">next build</text>
+
+  <rect x="72" y="966" width="182" height="80" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="84" y="988">CI da API</text>
+  <text class="bl" x="84" y="1005">push/PR em main</text>
+  <text class="bl" x="84" y="1021">service postgres + migrate</text>
+  <text class="bl" x="84" y="1037">jest (unit + integração)</text>
+
+  <rect x="292" y="846" width="280" height="80" rx="7" fill="#ffffff" stroke="#a78bfa" stroke-width="1.3"/>
+  <text class="bt" x="304" y="868">job docker-publish</text>
+  <text class="mono" x="304" y="885">build-push-action --build-arg API_URL</text>
+  <text class="bl" x="304" y="901">cache GHA · só em push na main</text>
+  <text class="mono" x="304" y="917">push :latest  +  :sha-&lt;short&gt;</text>
+
+  <rect x="292" y="966" width="280" height="80" rx="7" fill="#ffffff" stroke="#93c5fd" stroke-width="1.3"/>
+  <text class="bt" x="304" y="988">jobs build → smoke-test → publish</text>
+  <text class="mono" x="304" y="1005">docker compose --profile prod build</text>
+  <text class="bl" x="304" y="1021">sobe a stack e valida GET /health</text>
+  <text class="mono" x="304" y="1037">push :latest  +  :&lt;sha12&gt;</text>
+
+  <rect x="616" y="886" width="176" height="140" rx="7" fill="#fff7ed" stroke="#b45309" stroke-width="1.8"/>
+  <text class="bt" x="628" y="908">GHCR (registry)</text>
+  <text class="mono" x="628" y="927">ghcr.io/gbrlmzl/</text>
+  <text class="mono" x="628" y="943">  …-front</text>
+  <text class="mono" x="628" y="959">  …-api   (privado)</text>
+  <text class="bl" x="628" y="980">tags publicadas:</text>
+  <text class="mono" x="628" y="996">:latest  :&lt;sha&gt;</text>
+  <text class="mono" x="628" y="1013" fill="#b45309" font-weight="700">:stable  ← só após E2E</text>
+
+  <path d="M572,886 H594 V930 H616" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M572,1006 H594 V982 H616" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M254,886 H292" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M254,1006 H292" stroke="#6b7280" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <rect x="846" y="838" width="524" height="250" rx="8" fill="#ecfdf5" stroke="#0f766e" stroke-width="1.8"/>
+  <text class="bt" x="860" y="860" fill="#0f766e">sistema-controle-despesas-deploy  ·  workflow E2E</text>
+  <text class="bl" x="860" y="880">1 ·  resolve front_ref e api_image_tag a partir do tipo de disparo</text>
+  <text class="bl" x="860" y="898">2 ·  checkout do front no ref testado → subpasta ./front (specs do Cypress)</text>
+  <text class="bl" x="860" y="916">3 ·  login no GHCR — o pacote da API é privado (GHCR_PROMOTE_TOKEN)</text>
+  <text class="bl" x="860" y="934">4 ·  gera .env efêmero com JWT_SECRET aleatório (openssl rand -hex 32)</text>
+  <text class="mono" x="860" y="953">5 ·  docker compose up -d --build --wait</text>
+  <text class="bl" x="878" y="969">→ postgres + migrate + api (imagem GHCR) + front (buildado do fonte)</text>
+  <text class="mono" x="860" y="989">6 ·  npx cypress run --config baseUrl=http://localhost:3000</text>
+  <text class="mono" x="860" y="1008">7 ·  docker compose logs (if failure)  ·  down -v (always)</text>
+
+  <rect x="862" y="1026" width="492" height="46" rx="6" fill="#ffffff" stroke="#0f766e" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text class="bt" x="874" y="1045" fill="#0f766e">job promote — só quando o disparo foi repository_dispatch</text>
+  <text class="mono" x="874" y="1062">docker buildx imagetools create --tag …:stable  (re-tag, sem rebuild)</text>
+
+  <path d="M792,956 H846" stroke="#b45309" stroke-width="1.6" fill="none" marker-end="url(#arrowAmber)"/>
+  <text class="alab" x="819" y="948" text-anchor="middle" fill="#b45309">pull</text>
+
+  <path d="M432,846 V824 H1108 V838" stroke="#0f766e" stroke-width="1.5" fill="none" stroke-dasharray="6 3" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="700" y="818" fill="#0f766e">repository_dispatch: front-published  { sha, image_tag }</text>
+
+  <path d="M432,1046 V1108 H1108 V1088" stroke="#0f766e" stroke-width="1.5" fill="none" stroke-dasharray="6 3" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="700" y="1103" fill="#0f766e">repository_dispatch: api-published  { image_tag }</text>
+
+  <path d="M862,1049 H812 V1030 H792" stroke="#0f766e" stroke-width="1.6" fill="none" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="856" y="1080" text-anchor="end" fill="#0f766e">re-tag :stable</text>
+
+  <line x1="72" y1="1140" x2="1368" y2="1140" stroke="#dbe1ea"/>
+  <text class="note" x="72" y="1166"><tspan font-weight="700" fill="#0f172a">•</tspan>  O repo -deploy nunca builda artefato de produção: consome a imagem da API já testada no GHCR e rebuilda apenas o front — porque API_URL é congelado em build-time.</text>
+  <text class="note" x="72" y="1190"><tspan font-weight="700" fill="#0f172a">•</tspan>  Cada repo testa a si mesmo na própria pipeline; o -deploy é o único lugar que testa a combinação integrada. Um bug na API não derruba o CI do front, e vice-versa.</text>
+  <text class="note" x="72" y="1214"><tspan font-weight="700" fill="#0f172a">•</tspan>  Os specs do Cypress moram no repo do front, junto do código que exercitam — o -deploy só monta o ambiente e os invoca contra ele.</text>
+  <text class="note" x="72" y="1238"><tspan font-weight="700" fill="#0f172a">•</tspan>  A tag <tspan font-family="ui-monospace, Consolas, monospace">:stable</tspan> é o único sinal de "este SHA passou no E2E do sistema completo" — é o artefato que um deploy real deveria consumir.</text>
+</svg>

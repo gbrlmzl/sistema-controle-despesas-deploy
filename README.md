@@ -18,13 +18,19 @@ Os specs em si continuam vivendo no repo do front ([`sistema-controle-despesas-f
 │ (buildado│     │ (imagem do GHCR,    │     │          │
 │ do fonte)│     │  já testada no CI   │     │          │
 │  :3000   │     │  do próprio repo)   │     │          │
-└──────────┘     │        :3001        │     └──────────┘
+└──────────┘     │        :8080        │     └──────────┘
                   └─────────────────────┘
 ```
 
-**Front é buildado a partir do código-fonte, não da imagem publicada.** O Next.js resolve o destino do rewrite `/api/*` em build-time (ver comentário no `Dockerfile` do front) — a imagem publicada no GHCR carrega um placeholder (`http://localhost:8080`) que não aponta pro serviço `api` desta rede. Buildar aqui, com `API_URL=http://api:3001`, é a única forma de o proxy funcionar de verdade dentro do compose.
+**Front é buildado a partir do código-fonte, não da imagem publicada.** O Next.js resolve o destino do rewrite `/api/*` em build-time (ver comentário no `Dockerfile` do front) — a imagem publicada no GHCR carrega o `API_URL` do momento em que foi buildada, e não há garantia de que ele aponte pro serviço `api` desta rede. Buildar aqui, com `API_URL=http://api:8080`, é a única forma de o proxy funcionar de verdade dentro do compose **independentemente de como o CI do front foi configurado**.
+
+> **Nota de precisão (21/08/2026):** até 20/08, a imagem publicada carregava literalmente o placeholder `http://localhost:8080`, porque a Repository Variable `API_URL` do repo do front não existia. Ela foi configurada como `http://api:3001` — que na época coincidia com o valor que este compose usava, já que o serviço aqui também se chama `api`. **Não coincide mais**: a API padronizou sua porta para `8080` e este compose foi atualizado junto, enquanto a Repository Variable do repo do front continua em `http://api:3001` até aquele repositório também mudar. **É a quebra silenciosa que este parágrafo já alertava** — nomes coincidindo, não desenho. Continue buildando do fonte até o Route Handler existir.
 
 **API roda a imagem publicada.** Ela não tem esse problema — não tem nada baked-in no build, só lê variáveis de ambiente em runtime.
+
+> ⚠️ **Essa assimetria é uma dívida conhecida, não uma característica desejável.** O front é a única peça do sistema que **não** segue o "build once, promote everywhere": a imagem `:stable` dele carrega o `API_URL` do ambiente em que foi buildada. Em 20/08/2026 isso quebrou produção — a imagem foi publicada com o placeholder e toda chamada feita pelo navegador falhou, enquanto tudo que rodava no servidor continuava funcionando. Ver [`problema-rewrite-api-build-time.md`](../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md).
+>
+> A correção é um **Route Handler** no front que resolva `process.env.API_URL` em runtime. Quando ela entrar, o build do fonte deste `docker-compose.yml` deixa de ser necessário e o front passa a rodar a imagem publicada, como a API. Pendente — ver [`ingresso-aws.md`](./docs/ingresso-aws.md) §11.9.
 
 ## Rodando localmente
 
@@ -97,3 +103,55 @@ Os CIs do front e da API disparam um `repository_dispatch` contra este repo (`gb
 | `JWT_SECRET` | **Obrigatória.** Mínimo 32 caracteres — a API não sobe sem ela. |
 | `API_IMAGE_TAG` | Tag da imagem da API a puxar do GHCR (default `latest`). |
 | `FRONT_CONTEXT` | Caminho do código-fonte do front pro build (default `../sistema-controle-despesas-front`; no CI vira `./front`). |
+
+## Documentação da infra AWS
+
+| Documento | Conteúdo |
+|---|---|
+| [`docs/arquitetura-aws.md`](docs/arquitetura-aws.md) | Decisões de arquitetura, custos, cenários e o **roteiro de fases** |
+| [`docs/banco-de-dados-aws.md`](docs/banco-de-dados-aws.md) | Fase 3 — Postgres em container + volume EBS |
+| [`docs/api-aws.md`](docs/api-aws.md) | Fase 4 — task definition da API, ECR, secrets no SSM |
+| [`docs/ingresso-aws.md`](docs/ingresso-aws.md) | Fase 5 — Caddy, CloudFront, TLS, **e as pendências abertas** |
+| [`docs/front-aws.md`](docs/front-aws.md) | Fase 6 — task definition do front, `extraHosts` |
+| [`docs/separacao-de-tasks-front-api.md`](docs/separacao-de-tasks-front-api.md) | Por que front e API rodam em tasks separadas |
+| [`docs/docker-e-arquitetura.md`](docs/docker-e-arquitetura.md) | O estado do Docker e do CI nos três repositórios |
+
+## Pendências
+
+Estado em 21/08/2026: **Fases 0 a 6 concluídas** — o sistema está no ar em
+`https://d3c5d6t3539m1d.cloudfront.net`. O que falta, em ordem de importância:
+
+1. **Google OAuth e SMTP não têm variáveis configuradas em produção.** O código dos dois está pronto,
+   mas inerte: o botão de login com Google não funciona, e a recuperação de senha **completa o fluxo
+   sem nunca enviar o email**. O `env.ts` da API valida cada grupo como "tudo ou nada" — preencher
+   pela metade **impede a API de subir**. Ambas dependem do domínio da Fase 7. Ver
+   [`ingresso-aws.md`](docs/ingresso-aws.md) §11.8.
+2. **O rewrite `/api/*` do front continua resolvido em build-time.** Quebrou produção em 20/08/2026 e
+   foi corrigido só no valor, não no mecanismo — a imagem do front segue carregando a topologia da
+   rede. A Fase 7 muda o endereço público e reativaria o bug. A saída é um **Route Handler** em
+   runtime; quando ele entrar, o build do fonte deste compose deixa de ser necessário. Ver
+   [`ingresso-aws.md`](docs/ingresso-aws.md) §11.9.
+3. **Fase 7 — domínio próprio.** `.com.br` no Registro.br, DNS na Cloudflare, ACM, Caddy com Let's
+   Encrypt na origem. É o gatilho natural dos dois itens acima e de `FRONTEND_URL` deixar de ser
+   placeholder — vale agrupar tudo numa revisão de task definition só.
+4. **Fase 8 — automatizar o espelhamento no ECR.** Hoje são **três** imagens (API, front, Caddy)
+   espelhadas à mão. Estender o job `promote` é o caminho. Note que o passo final (`update-service`)
+   é deliberadamente manual e deve continuar assim.
+5. **O espelhamento manual usa `:latest`, não `:stable` — e isso anula o propósito do job `promote`.**
+   O `:latest` é publicado pelos CIs do front e da API **antes** de o e2e rodar; o `:stable` só existe
+   **depois** que ele passa. Espelhar `:latest` para o ECR significa mandar para produção um artefato
+   que a validação de ponta a ponta ainda não aprovou, enquanto a tag validada fica ali sem uso. Na
+   prática costuma ser o mesmo conteúdo (o e2e passa logo em seguida), mas basta um e2e vermelho para
+   a diferença aparecer no pior momento possível. **Correção:** trocar `:latest` por `:stable` nos
+   comandos de espelhamento — e já deixar assim quando a Fase 8 automatizar o passo.
+6. **Padronizar a porta da API em `8080`.** Hoje `3001` difere do `3000` do front em um dígito, o que
+   já se mostrou fonte de confusão. Sem ganho técnico, só legibilidade — ~~6 arquivos de código~~ (já
+   feito: 5 no repo da API, `docker-compose.yml` deste) e 3 mudanças de infra, ainda pendentes. Barato
+   se feito junto com o item 2, que já exige rebuild dos dois lados. Ver
+   [`ingresso-aws.md`](docs/ingresso-aws.md) §11.10.
+7. **Sem WAF e sem rate limiting na borda** — decisão consciente de orçamento, registrada em
+   [`ingresso-aws.md`](docs/ingresso-aws.md) §11.6. O CloudFront traz Shield Standard de graça (L3/L4),
+   e o teto fixo de compute protege a fatura; nada protege contra sobrecarga da instância.
+8. **O `Caddyfile` não sobrevive à substituição da instância** — criado à mão, não versionado. Mesma
+   classe do mount do EBS; resolver as duas juntas num user-data. Ver
+   [`ingresso-aws.md`](docs/ingresso-aws.md) §11.1.
