@@ -98,6 +98,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PROMOTE_TOKEN }}
 
+      # A imagem da API publicada no GHCR é linux/arm64 puro (único destino de
+      # deploy é uma instância Graviton), mas o runner é amd64. Sem o QEMU
+      # registrado no binfmt, os containers "api" e "migrate" são criados e
+      # morrem no exec — o sintoma é o migrate saindo com 255 e o compose
+      # abortando antes de qualquer spec rodar.
+      - name: Registrar QEMU (a imagem da API é arm64, o runner é amd64)
+        uses: docker/setup-qemu-action@v3
+
       - name: Subir a stack (postgres + api + front) e aguardar health
         env:
           FRONT_CONTEXT: ./front

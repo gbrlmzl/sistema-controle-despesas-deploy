@@ -552,10 +552,13 @@ docker compose down -v
   Consequência prática: **rodar** qualquer uma dessas imagens numa máquina x86 depende de QEMU
   registrado; **buildar** localmente, não — o `docker build` continua produzindo a arquitetura do
   host.
-- **O E2E deste repositório roda a imagem ARM da API num runner x86 — e isso precisa ser conferido no
-  próximo run.** O job `e2e` executa em `ubuntu-latest` (amd64) e faz `docker compose up` da imagem
-  publicada da API, que agora é arm64. Diferente do job `smoke-test` da API, este workflow **não**
-  chama `docker/setup-qemu-action`. Se o run falhar no pull (erro de manifesto) ou no boot do
-  container (`exec format error`), a correção é acrescentar esse step antes do `compose up`. O front
-  não tem esse problema aqui, porque é buildado do código-fonte, na arquitetura do runner.
+- ~~**O E2E deste repositório roda a imagem ARM da API num runner x86 — e isso precisa ser conferido no
+  próximo run.**~~ **Confirmado e corrigido em 21/08/2026.** O job `e2e` executa em `ubuntu-latest`
+  (amd64) e faz `docker compose up` da imagem publicada da API, que é arm64 — e quebrava exatamente
+  como previsto. O sintoma real não foi `exec format error` visível: o compose avisava
+  `The requested image's platform (linux/arm64) does not match the detected host platform
+  (linux/amd64/v3)` para `api` e `migrate`, e o run morria em
+  `service "migrate" didn't complete successfully: exit 255` — antes de qualquer spec rodar. A
+  correção foi a prevista: um step `docker/setup-qemu-action@v3` antes do `compose up`. O front não
+  tem esse problema aqui, porque é buildado do código-fonte, na arquitetura do runner.
 - **Comentário desatualizado** no `docker-compose.yml` do front, mencionado na seção 2.4.
