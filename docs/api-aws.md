@@ -170,11 +170,11 @@ para identificar a origem dos streams quando a task tiver mais containers na Fas
 | Task role | **vazia** | A API não chama nenhuma API da AWS em runtime — INFRA-05 |
 | Execution role | `ecsTaskExecutionRole` | Puxa a imagem do ECR e lê os secrets |
 | Autenticação de registro privado | **vazia** | Desnecessária com ECR — ver §1 |
-| `portMappings` | `3001:3001` | Porta fixa, publicada no host |
+| `portMappings` | `8080:8080` (era `3001:3001`, padronizado em 21/08/2026) | Porta fixa, publicada no host |
 | `readonlyRootFilesystem` | **`true`** | Ver §7 |
 | `healthCheck` | `/health` | Ver §9 |
 
-**Variáveis em texto plano:** `NODE_ENV=production`, `PORT=3001`,
+**Variáveis em texto plano:** `NODE_ENV=production`, `PORT=8080` (era `3001`),
 `FRONTEND_URL=http://localhost:3000`.
 
 **Variáveis como `secrets`:** `DATABASE_URL` e `JWT_SECRET`, apontando para os ARNs do SSM.
@@ -375,7 +375,7 @@ minimumHealthyPercent = 0
 maximumPercent = 100
 ```
 
-Mesmo raciocínio da `cronos-data`: uma instância, porta fixa (3001), então a task antiga precisa sair
+Mesmo raciocínio da `cronos-data`: uma instância, porta fixa (8080), então a task antiga precisa sair
 antes de a nova subir. O padrão (`100`) travaria o deploy para sempre.
 
 Diferente da Fase 3, o service foi criado pelo **console** — e o formulário trouxe quatro decisões que
@@ -384,7 +384,7 @@ a CLI não pergunta:
 | Opção do console | Escolha | Por quê |
 |---|---|---|
 | **Tipo de inicialização** vs. **Estratégia de provedor de capacidade** | Tipo de inicialização → EC2 | Um capacity provider pode estar ligado a *managed scaling* do ASG e **criar instâncias sozinho**. É o INFRA-01 da revisão de segurança: teto de compute fixo é a proteção estrutural contra DDoS financeiro. `launch-type` só posiciona no que já existe, e falha de forma visível se não couber |
-| **Rebalanceamento de zonas de disponibilidade** | **Desativado** | Veio ligado por padrão e **bloqueava o formulário**, exigindo `maximumPercent > 100`. Não faz sentido aqui: uma instância, uma AZ (`us-east-2b`, a mesma do volume EBS). Subir o máximo para satisfazer a validação seria pior — o ECS tentaria rodar 2 tasks e esbarraria na porta 3001 |
+| **Rebalanceamento de zonas de disponibilidade** | **Desativado** | Veio ligado por padrão e **bloqueava o formulário**, exigindo `maximumPercent > 100`. Não faz sentido aqui: uma instância, uma AZ (`us-east-2b`, a mesma do volume EBS). Subir o máximo para satisfazer a validação seria pior — o ECS tentaria rodar 2 tasks e esbarraria na porta 8080 |
 | **Service Auto Scaling** | Desativado | Mesmo INFRA-01 |
 | **ECS Exec** | Desativado | Daria `docker exec` remoto, mas exigiria permissões novas na task role — que decidimos manter **vazia**. O mesmo acesso já existe via `ssm start-session` + `sudo docker exec` |
 | **Métricas de alta resolução (20s)** | Não — padrão de 60s | A resolução fina é paga; 60s é grátis e suficiente para qualquer alarme que valha a pena hoje |
@@ -410,8 +410,8 @@ que fecham isso, de dentro da instância:
 
 | Comando | O que prova |
 |---|---|
-| `curl -s http://localhost:3001/health` | O processo Node está vivo (sem tocar o banco) |
-| `curl -s http://localhost:3001/ready` | **Ponta a ponta**: API → Security Group → Postgres → resposta |
+| `curl -s http://localhost:8080/health` | O processo Node está vivo (sem tocar o banco) |
+| `curl -s http://localhost:8080/ready` | **Ponta a ponta**: API → Security Group → Postgres → resposta |
 | `sudo docker ps` | Os dois containers lado a lado, ambos `(healthy)` |
 
 > Atenção ao ler o `docker ps`: o `(healthy)` do container da API vem do health check da task
@@ -432,10 +432,11 @@ Em ordem de importância. Nenhuma bloqueia a Fase 5.
    "container morto sem log".
 3. ~~**Swap ainda não configurado**~~ — **configurado**, junto com o resize para `t4g.small`
    ([`front-aws.md`](./front-aws.md), pré-requisitos).
-4. **A regra da porta 3001 no Security Group usa CIDR** (`172.31.0.0/16`) em vez de *self-reference* —
-   a inconsistência já anotada em [`banco-de-dados-aws.md`](./banco-de-dados-aws.md) §6. O service
-   `app` agora existe; dá para corrigir. **Se a padronização da porta (item 9) for feita, corrija as
-   duas coisas na mesma mexida** — é a mesma regra.
+4. **A regra da porta da API no Security Group usa CIDR** (`172.31.0.0/16`) em vez de
+   *self-reference* — a inconsistência já anotada em
+   [`banco-de-dados-aws.md`](./banco-de-dados-aws.md) §6. Sobreviveu à padronização da porta (item 9):
+   a regra nova de `8080` replicou o mesmo CIDR da antiga de `3001`, em vez de aproveitar a mexida
+   para corrigir. Ainda pendente.
 5. **`FRONTEND_URL` é um placeholder** (§5). Vira a origem real na Fase 7, junto com o item 7.
 6. **O espelhamento no ECR é manual** (§1). Automatizar no job `promote` é a Fase 8 — hoje são
    **três** imagens (API, front e Caddy).
@@ -450,12 +451,10 @@ Em ordem de importância. Nenhuma bloqueia a Fase 5.
 8. **Falta decidir o provedor de SMTP.** O Amazon SES é o caminho natural dentro da conta, mas começa
    em **sandbox** — só envia para endereço verificado, e sair disso exige um pedido que leva alguns
    dias. Vale descobrir isso antes da Fase 7, não durante.
-9. **Padronizar a porta da API em `8080`** (era `3001`, um dígito do `3000` do front). Legibilidade
-   operacional, sem ganho técnico. **Lado código: feito** — `src/config/env.ts`, `.env.example`,
-   `Dockerfile` e `ci.yml` no repo da API, e o `docker-compose.yml` do repo de deploy. **Lado infra
-   AWS: pendente** — Security Group ainda libera só `3001`, e as task definitions
-   `cronos-app`/`cronos-front` ainda apontam para `3001`. Ver [`ingresso-aws.md`](./ingresso-aws.md)
-   §11.10 para a ordem de execução na AWS.
+9. ~~**Padronizar a porta da API em `8080`**~~ (era `3001`, um dígito do `3000` do front) —
+   **concluído em 21/08/2026.** Código e infra AWS (Security Group, `cronos-app:2`, `cronos-front:3`)
+   já usam `8080`; verificado via SSM (`curl localhost:8080/health` e `front->api` OK). Ver
+   [`ingresso-aws.md`](./ingresso-aws.md) §11.10 para o detalhamento.
 
 ---
 

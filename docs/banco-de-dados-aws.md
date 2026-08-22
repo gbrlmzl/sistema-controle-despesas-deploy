@@ -215,10 +215,12 @@ Isso assusta à primeira vista, mas é apenas o Docker escutando em todas as int
 Quem decide se um pacote vindo de fora chega até ali é o Security Group, que está fechado. As duas
 camadas são independentes, e a de rede é a que vale.
 
-> **Inconsistência conhecida, a corrigir na Fase 4:** a regra da porta 3001 (API) usa
+> **Inconsistência conhecida, ainda não corrigida:** a regra da porta da API (`8080`, migrada de
+> `3001` em 21/08/2026 — ver [`ingresso-aws.md`](./ingresso-aws.md) §11.10) usa
 > `CidrIp: 172.31.0.0/16` em vez de self-reference. Funciona e não expõe nada à internet — é a faixa
-> privada da VPC —, mas é o padrão que este documento acabou de argumentar contra. Deve ser trocada
-> quando o service `app` for criado.
+> privada da VPC —, mas é o padrão que este documento acabou de argumentar contra. A padronização da
+> porta foi a chance óbvia de corrigir isso na mesma mexida — não corrigiu, só replicou o mesmo CIDR
+> para a porta nova.
 
 ---
 
@@ -462,7 +464,8 @@ Em ordem de importância. Nenhuma bloqueia a Fase 4.
    mão. Se o ASG substituir a instância, o volume fica órfão e o service `data` nunca sobe. A correção
    são ~10 linhas de user-data reanexando o volume por ID e montando-o **antes** do agente ECS subir.
    É a pendência mais perigosa desta lista, porque só se manifesta no dia em que algo já deu errado.
-4. **A regra da porta 3001 usa CIDR em vez de self-reference** (§6). Trocar ao criar o service `app`.
+4. **A regra da porta da API usa CIDR em vez de self-reference** (§6) — hoje na `8080` (migrou de
+   `3001` em 21/08/2026, sem corrigir o CIDR). Trocar na próxima vez que essa regra for mexida.
 5. **Nada disso é reproduzível.** É a consequência aceita da §1, e a razão de este documento existir
    com este nível de detalhe.
 

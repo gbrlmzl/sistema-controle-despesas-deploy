@@ -124,7 +124,7 @@ Já documentado em [`docker-e-arquitetura.md`](./docker-e-arquitetura.md) §4.2:
 
 > **Consequência:** a imagem do front é *específica do ambiente*. O "build once, promote everywhere" do CI atual **não vale para o front** — a `:stable` carrega o `API_URL` que valia no momento do build, vindo de uma Repository Variable configurada à mão no GitHub e versionada em lugar nenhum.
 >
-> Com tudo na mesma instância isso fica quase indolor: o front aponta para `http://api:3001`, que é um valor **fixo**, igual em qualquer deploy. O `API_URL` deixa de ser uma variável de ambiente e vira uma constante da arquitetura.
+> Com tudo na mesma instância isso fica quase indolor: o front aponta para `http://api:8080` (`3001` até 21/08/2026), que é um valor **fixo**, igual em qualquer deploy. O `API_URL` deixa de ser uma variável de ambiente e vira uma constante da arquitetura.
 >
 > **"Quase indolor" acabou custando um incidente.** Em 20/08/2026 a Repository Variable não existia, o CI caiu no fallback `http://localhost:8080` e a imagem foi para produção com o rewrite apontando para lugar nenhum — quebrando **toda** a interatividade client-side, enquanto o servidor seguia funcionando. Ver §9 e [`problema-rewrite-api-build-time.md`](../../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md). O valor foi corrigido; **o mecanismo, não**. A saída definitiva é o Route Handler em runtime, que faz a imagem do front voltar a ser genérica e o "build once, promote everywhere" valer para os três repositórios.
 
@@ -590,8 +590,8 @@ momentos, por dois motivos diferentes:
   ambiente, ele lança `Error: Variável de ambiente API_URL não configurada.`
 
 Os dois valores têm de ser **o mesmo**. Na topologia final (tasks separadas — ver
-[`separacao-de-tasks-front-api.md`](./separacao-de-tasks-front-api.md)) esse valor é `http://api:3001`,
-com `api` resolvido pelo `extraHosts` da task do front. No build ele vem da Repository Variable
+[`separacao-de-tasks-front-api.md`](./separacao-de-tasks-front-api.md)) esse valor é `http://api:8080`
+(`3001` até 21/08/2026), com `api` resolvido pelo `extraHosts` da task do front. No build ele vem da Repository Variable
 `API_URL` do repositório do front, configurada à mão na interface do GitHub e **fora de qualquer
 automação** — se ela não existir, o CI publica a imagem com o placeholder e o erro só aparece no ECS.
 
@@ -755,7 +755,11 @@ O que já está pronto e não precisa ser refeito: imagens versionadas no GHCR, 
 5. **Terraform ou CDK.** Terraform é mais comum em vaga de infra; o CDK deixa você em TypeScript, a linguagem dos três repositórios. Sugestão: Terraform, pelo mercado.
 6. **Savings Plan de 1 ano** (§6): só depois de decidir que o projeto fica no ar. Economiza ~US$ 5/mês, mas amarra 12 meses.
 7. **SMTP: qual provedor?** As 5 variáveis (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`) também são "tudo ou nada". Sem elas, a recuperação de senha **completa o fluxo sem nunca enviar o email** — degradação graciosa que é invisível para quem testa só a resposta HTTP. Vale decidir junto com a Fase 7, porque `MAIL_FROM` num domínio próprio tem entregabilidade melhor que num `*.cloudfront.net`. O Amazon SES é a opção óbvia dentro da conta, mas exige sair do sandbox para enviar a destinatário não verificado — o que leva alguns dias e é o tipo de fricção que vale descobrir antes, não durante.
-8. **Padronizar a porta da API em `8080`?** Hoje `3001` (API) e `3000` (front) diferem em um dígito, o que já se mostrou fonte de confusão. Não há ganho técnico — é legibilidade. **Lado código: feito** — os 5 arquivos do repo da API e o `docker-compose.yml` deste repo já usam `8080`. Falta o lado infra: 3 mudanças (Security Group, `cronos-app`, `cronos-front`) e a Repository Variable `API_URL` do front; ver [`problema-rewrite-api-build-time.md`](../../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md) §14.4. Se for feito, o momento barato é junto com a Fase 7, que já exige rebuild e redeploy dos dois lados.
+8. ~~**Padronizar a porta da API em `8080`?**~~ — **decidido e concluído em 21/08/2026**, fora da
+   Fase 7 (não valeu esperar — o custo real foi bem menor que o levantado). Código e infra AWS
+   (Security Group, `cronos-app:2`, `cronos-front:3`) todos em `8080`, verificado ponta a ponta via
+   SSM. Falta só a Repository Variable `API_URL` do repo do front (sem efeito em produção); ver
+   [`problema-rewrite-api-build-time.md`](../../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md) §14.4.
 
 ---
 

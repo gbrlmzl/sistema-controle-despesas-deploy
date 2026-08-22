@@ -63,10 +63,10 @@ sudo docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{
 em `networkMode: bridge`. O esperado é `172.17.0.1`. Se vier outro valor (alguém configurou `bip` no
 daemon), **use o valor que apareceu** no lugar de `172.17.0.1` em todo o resto deste documento.
 
-### 1.2 Provar que a porta 3001 responde por ali
+### 1.2 Provar que a porta 8080 responde por ali
 
 ```bash
-sudo docker exec $(sudo docker ps --filter "name=ecs-cronos-app" --format "{{.Names}}") node -e "fetch('http://172.17.0.1:3001/health').then(r=>r.text()).then(t=>console.log('ALCANCOU:',t)).catch(e=>console.log('FALHOU:',e.message))"
+sudo docker exec $(sudo docker ps --filter "name=ecs-cronos-app" --format "{{.Names}}") node -e "fetch('http://172.17.0.1:8080/health').then(r=>r.text()).then(t=>console.log('ALCANCOU:',t)).catch(e=>console.log('FALHOU:',e.message))"
 ```
 
 **O que faz:** entra no container da API (que já está na bridge e já tem Node) e faz ele chamar a
@@ -84,7 +84,7 @@ documento de decisão) antes de qualquer outra etapa.
 
 ## 2. A escolha que torna o endereço legível: `extraHosts`
 
-O documento de decisão (§8) propôs pôr `API_URL=http://172.17.0.1:3001` direto na variável de
+O documento de decisão (§8) propôs pôr `API_URL=http://172.17.0.1:8080` (`3001` até 21/08/2026) direto na variável de
 ambiente, e registrou como custo aceito que "o `172.17.0.1` é opaco e exige comentário". **Há uma
 saída melhor, e ela sai de graça.**
 
@@ -98,15 +98,15 @@ Com isso, `api` volta a ser um nome resolvível dentro do container do front —
 continua sendo exatamente o mesmo de sempre:
 
 ```
-API_URL=http://api:3001
+API_URL=http://api:8080
 ```
 
 Três ganhos, nenhum custo:
 
 1. **A variável de ambiente não muda** em relação ao plano de task única. Quem ler a task definition vê
-   `http://api:3001`, que é auto-explicativo; o mapeamento fica num campo próprio, comentado.
+   `http://api:8080`, que é auto-explicativo; o mapeamento fica num campo próprio, comentado.
 2. **O valor congelado em build-time continua correto.** O rewrite `/api/*` embutido na imagem aponta
-   para `http://api:3001` (a Repository Variable do CI). Com `extraHosts`, esse valor volta a resolver
+   para `http://api:8080` (a Repository Variable do CI — `3001` até esse repositório também mudar, ver `ingresso-aws.md` §11.10). Com `extraHosts`, esse valor volta a resolver
    — o que fecha a dívida datada que a §2 do documento de decisão registrava para quando o Google
    login for ligado.
 3. **A migração futura para Service Connect fica trivial:** troca-se o `extraHosts` por
@@ -170,7 +170,7 @@ Grave o JSON abaixo como `cronos-front.json`, **substituindo `<conta>` pelo ID r
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
         { "name": "PORT", "value": "3000" },
-        { "name": "API_URL", "value": "http://api:3001" },
+        { "name": "API_URL", "value": "http://api:8080" },
         { "name": "NEXT_TELEMETRY_DISABLED", "value": "1" }
       ],
       "readonlyRootFilesystem": true,
@@ -219,7 +219,7 @@ Grave o JSON abaixo como `cronos-front.json`, **substituindo `<conta>` pelo ID r
 | `executionRoleArn` | `ecsTaskExecutionRole` | Puxa a imagem do ECR. **Já tem a permissão** — a policy gerenciada cobre `ecr:GetAuthorizationToken` e `ecr:BatchGetImage` desde a Fase 3 |
 | Task role | **ausente** | O front não chama nenhuma API da AWS em runtime. Mesmo INFRA-05 aplicado à API |
 | `memory` / `memoryReservation` | 512 / 320 | Limite rígido pelo mesmo motivo da API (`api-aws.md` §6): um vazamento no front mata o front, não o Postgres. Ver o orçamento na §4.2 |
-| `portMappings` | `3000:3000` | Porta fixa no host, como a API faz com 3001. Não conflita |
+| `portMappings` | `3000:3000` | Porta fixa no host, como a API faz com 8080. Não conflita |
 | `extraHosts` | `api → 172.17.0.1` | O coração do cenário B — ver §2 |
 | `readonlyRootFilesystem` | `true` | Mesma proteção da API (`api-aws.md` §7): uma RCE não consegue gravar payload. Exige os `tmpfs` abaixo |
 | `linuxParameters.tmpfs` | `.next/cache` (64 MiB), `/tmp` (16 MiB) | O Next **escreve** cache de imagem/fetch em `.next/cache` — é exatamente o caso que o §7 da API previa ("montar um `tmpfs` só no diretório que precisa, mantendo o resto travado") |
@@ -381,7 +381,7 @@ estourar, o diagnóstico está na §8.
 ### 7.1 Repository Variable `API_URL` no repositório do front — **bloqueante**
 
 O CI passa `API_URL` como `--build-arg`, congelando o destino do rewrite `/api/*` na imagem. Com o
-`extraHosts` da §2, o valor correto é `http://api:3001`. Confirme em *Settings → Secrets and variables
+`extraHosts` da §2, o valor correto é `http://api:8080`. Confirme em *Settings → Secrets and variables
 → Actions → Variables*.
 
 Se estiver ausente, o CI cai no placeholder `http://localhost:8080` e **o rewrite fica quebrado dentro
@@ -412,7 +412,7 @@ pelo literal.**
 Ele afirma que buildar o front do fonte é "a única forma de o proxy funcionar de verdade dentro do
 compose". **A afirmação está correta e deve ser mantida** — a revisão sugerida aqui originalmente
 partia da mesma análise errada da §7.1. Com o rewrite congelado em build-time e a imagem publicada no
-GHCR carregando o placeholder, buildar do fonte com `API_URL=http://api:3001` é de fato a única forma
+GHCR carregando o placeholder, buildar do fonte com `API_URL=http://api:8080` é de fato a única forma
 de o `/api/*` funcionar dentro do compose.
 
 Isso deixa de valer quando a Abordagem B (Route Handler em runtime) for implementada — aí o compose
@@ -433,11 +433,11 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000
 **O que faz:** confirma que o front responde na porta publicada. Espera-se `200`.
 
 ```bash
-sudo docker exec $(sudo docker ps --filter "name=ecs-cronos-front" --format "{{.Names}}") node -e "fetch('http://api:3001/health').then(r=>r.text()).then(t=>console.log('FRONT->API OK:',t)).catch(e=>console.log('FALHOU:',e.message))"
+sudo docker exec $(sudo docker ps --filter "name=ecs-cronos-front" --format "{{.Names}}") node -e "fetch('http://api:8080/health').then(r=>r.text()).then(t=>console.log('FRONT->API OK:',t)).catch(e=>console.log('FALHOU:',e.message))"
 ```
 
 **O que faz:** é **o teste que importa nesta fase**. Entra no container do front e resolve o nome
-`api` — provando de uma vez que o `extraHosts` foi aplicado, que o gateway responde e que a porta 3001
+`api` — provando de uma vez que o `extraHosts` foi aplicado, que o gateway responde e que a porta 8080
 está acessível. Se falhar com `getaddrinfo`, o `extraHosts` não pegou; se falhar com `ECONNREFUSED`, o
 gateway está errado (volte à §1.1).
 
@@ -533,14 +533,13 @@ definition pode ficar registrada (não custa nada).
    SSM. Ambas dependem da Fase 7: o `GOOGLE_CALLBACK_URL` precisa da URL pública real (registrada
    também no Google Cloud Console), e `FRONTEND_URL` — que alimenta o redirect final do OAuth —
    precisa deixar de ser placeholder junto (item 2).
-9. **Padronizar a porta da API em `8080`.** Hoje ela é `3001` e o front é `3000`: um dígito de
-   diferença, em comando, log e task definition. Não há ganho técnico — é legibilidade operacional, e
-   por isso não tem urgência. Custo: ~~6 arquivos de código~~ (5 no repo da API, 1 neste — **já
-   feitos**), **nenhum no repo do front** (só o valor da Repository Variable `API_URL`, ainda
-   pendente), mais 3 mudanças de infra, ainda pendentes: regra do Security Group, revisão da
-   `cronos-app` e revisão da `cronos-front`. Detalhamento em
+9. ~~**Padronizar a porta da API em `8080`.**~~ — **concluído em 21/08/2026**, fora da Fase 7 (não
+   valeu esperar). Os 6 arquivos de código e as 3 mudanças de infra (Security Group, `cronos-app:2`,
+   `cronos-front:3`) estão feitos e verificados ponta a ponta via SSM. O repo do front não teve nenhum
+   arquivo a mudar — só a Repository Variable `API_URL`, que segue em `http://api:3001` (sem efeito no
+   que está no ar). Detalhamento em
    [`problema-rewrite-api-build-time.md`](../../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md)
-   §14.4. **Vale agrupar com o item 7**, que já exige rebuild e redeploy dos dois lados.
+   §14.4.
 
 ---
 

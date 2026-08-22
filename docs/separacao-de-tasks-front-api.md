@@ -16,7 +16,8 @@ que cada uma acarreta, e recomenda um caminho.
 ## 0. O resumo, pra quem só quer a resposta
 
 **Separar em duas tasks é a recomendação, e custa US$ 0,00 a mais.** O que ela cobra não é dinheiro, é
-uma decisão de endereçamento: hoje o front acharia a API por `links` do Docker (`http://api:3001`),
+uma decisão de endereçamento: hoje o front acharia a API por `links` do Docker (`http://api:8080`,
+`3001` até 21/08/2026),
 que só funciona **dentro da mesma task**. Separadas, elas precisam de outro caminho.
 
 E há uma descoberta que muda o peso da decisão, detalhada na §2:
@@ -125,12 +126,12 @@ caminho seguro até haver domínio.
 ## 3. O problema que a separação cria: como o front acha a API
 
 Com `networkMode: bridge`, containers da **mesma task** se enxergam por nome via `links` — é o que faz
-`http://api:3001` funcionar. **`links` não atravessa tasks.** Separadas, as opções são:
+`http://api:8080` funcionar. **`links` não atravessa tasks.** Separadas, as opções são:
 
-### 3.1 IP do gateway da bridge do Docker — `http://172.17.0.1:3001`
+### 3.1 IP do gateway da bridge do Docker — `http://172.17.0.1:8080`
 
 Todo container em modo bridge enxerga o host pelo gateway da rede `docker0`, que é `172.17.0.1` por
-padrão do Docker. Como a API publica `3001` no host, o front alcança ela por aí.
+padrão do Docker. Como a API publica `8080` no host, o front alcança ela por aí.
 
 - ✅ **Zero RAM extra, zero custo, zero serviço novo.**
 - ✅ **Estável entre instâncias** — não é o IP privado da instância (que muda se ela for substituída,
@@ -141,7 +142,7 @@ padrão do Docker. Como a API publica `3001` no host, o front alcança ela por a
   no dia em que houver duas.
 - ⚠️ Depende do subnet default do Docker. Se alguém configurar `bip` no daemon, quebra.
 
-### 3.2 IP privado da instância — `http://172.31.18.227:3001`
+### 3.2 IP privado da instância — `http://172.31.18.227:8080`
 
 O mesmo caminho que o `DATABASE_URL` da API já usa para achar o Postgres.
 
@@ -266,7 +267,7 @@ feita.
 | Crash do front derruba a API | ❌ sim | ✅ não | ✅ não |
 | Custo em dinheiro | US$ 0 | **US$ 0** | ~US$ 0,10–0,30/mês |
 | Custo em RAM | 0 | **0** | ~128 MB |
-| Endereçamento | `http://api:3001` (`links`) | `http://172.17.0.1:3001` | `http://api.cronos.local:3001` |
+| Endereçamento | `http://api:8080` (`links`) | `http://172.17.0.1:8080` | `http://api.cronos.local:8080` |
 | Legibilidade do endereço | ✅ óbvia | ⚠️ precisa de comentário | ✅ óbvia |
 | Sobrevive à troca da instância | ✅ | ✅ | ✅ |
 | Sobrevive a uma segunda instância | ✅ | ❌ | ✅ |
@@ -277,15 +278,15 @@ feita.
 
 ## 8. Recomendação
 
-**Cenário B: duas tasks, front achando a API pelo gateway da bridge (`http://172.17.0.1:3001`).**
+**Cenário B: duas tasks, front achando a API pelo gateway da bridge (`http://172.17.0.1:8080`).**
 
 Os motivos, em ordem:
 
 1. **É grátis nos dois orçamentos** — nem dólar nem megabyte. Não existe trade-off a ponderar.
 2. **Resolve o problema que originou este documento**, incluindo o caso do crash, que é mais grave que
    o do deploy.
-3. **O `API_URL` é variável de ambiente de runtime** (§2). Trocar `http://api:3001` por
-   `http://172.17.0.1:3001` é editar um campo da task definition — não exige rebuild, não toca no CI,
+3. **O `API_URL` é variável de ambiente de runtime** (§2). Trocar `http://api:8080` por
+   `http://172.17.0.1:8080` é editar um campo da task definition — não exige rebuild, não toca no CI,
    não muda a imagem já espelhada no ECR.
 4. **Service Connect continua disponível depois.** Migrar de B para C é trocar o valor de uma variável
    e adicionar `serviceConnectConfiguration` — nada em B fecha essa porta.
@@ -314,16 +315,17 @@ Nenhum destes passos foi executado. São o delta em relação ao plano da Fase 6
 1. **Nova task definition `cronos-front`** (família própria), com um container só: imagem do ECR,
    `linux/arm64`, `bridge`, `3000:3000`, memória rígida 512 / flexível 320,
    `readonlyRootFilesystem: true` + `tmpfs` em `/app/.next/cache`, healthcheck em `/`.
-2. **`API_URL=http://172.17.0.1:3001`** como variável de ambiente, com comentário explicando o
-   endereço.
+2. **`API_URL=http://172.17.0.1:8080`** (`3001` até 21/08/2026) como variável de ambiente, com
+   comentário explicando o endereço.
 3. **Novo service `cronos-front`**, `desiredCount=1`, `minimumHealthyPercent=0`, `maximumPercent=100`
    (mesma razão de sempre: porta fixa, instância única), disjuntor de implantação com reversão
    automática.
 4. **A `cronos-app` não muda** — continua com o container `api` sozinho. Nenhuma revisão nova, nenhum
    downtime da API para fazer esta mudança.
-5. **Security group:** confirmar que a porta 3001 é alcançável a partir da bridge do Docker. O tráfego
-   não sai da instância (é loopback via `docker0`), então a regra atual deve bastar — mas é o primeiro
-   ponto a verificar se o front subir e não conseguir falar com a API.
+5. **Security group:** confirmar que a porta da API é alcançável a partir da bridge do Docker. O
+   tráfego não sai da instância (é loopback via `docker0`), então a regra atual deve bastar — mas é o
+   primeiro ponto a verificar se o front subir e não conseguir falar com a API. (Reconfirmado em
+   `8080` após a padronização de 21/08/2026 — ver item 6 da lista de pendências abaixo.)
 6. **Caddy (Fase 5)** passa a apontar para o front na porta 3000 do host, sem mudança em relação ao
    que já estava previsto.
 
@@ -345,10 +347,10 @@ Nenhum destes passos foi executado. São o delta em relação ao plano da Fase 6
    por um detalhe de topologia: `/api/auth/google` é uma **navegação do navegador**, não um `fetch`,
    então atravessa o mesmo rewrite da §2 e depende do Route Handler repassar o `302` corretamente
    quando ele existir.
-6. **Padronizar a porta da API em `8080`** (`ingresso-aws.md` §11.10) — **lado código já feito** (repo
-   da API e o `docker-compose.yml` deste repo). Toca este documento no item 5 da §9 — a regra do
-   Security Group que libera a porta a partir da bridge do Docker ainda precisa mudar, e vale corrigir
-   o CIDR para *self-reference* na mesma mexida (`api-aws.md` §13.4).
+6. ~~**Padronizar a porta da API em `8080`**~~ (`ingresso-aws.md` §11.10) — **concluído em
+   21/08/2026**, código e infra AWS. A regra do Security Group que libera a porta a partir da bridge
+   do Docker (item 5 da §9) foi replicada pra `8080` com o mesmo CIDR de antes — o CIDR-vs-
+   *self-reference* de `api-aws.md` §13.4 **não foi corrigido**, só migrou de porta.
 
 ---
 

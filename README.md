@@ -144,10 +144,9 @@ Estado em 21/08/2026: **Fases 0 a 6 concluídas** — o sistema está no ar em
    prática costuma ser o mesmo conteúdo (o e2e passa logo em seguida), mas basta um e2e vermelho para
    a diferença aparecer no pior momento possível. **Correção:** trocar `:latest` por `:stable` nos
    comandos de espelhamento — e já deixar assim quando a Fase 8 automatizar o passo.
-6. **Padronizar a porta da API em `8080`.** Hoje `3001` difere do `3000` do front em um dígito, o que
-   já se mostrou fonte de confusão. Sem ganho técnico, só legibilidade — ~~6 arquivos de código~~ (já
-   feito: 5 no repo da API, `docker-compose.yml` deste) e 3 mudanças de infra, ainda pendentes. Barato
-   se feito junto com o item 2, que já exige rebuild dos dois lados. Ver
+6. ~~**Padronizar a porta da API em `8080`.**~~ **Concluído em 21/08/2026** — código e infra AWS
+   (Security Group, `cronos-app:2`, `cronos-front:3`) já usam `8080`; verificado ponta a ponta via SSM.
+   Falta só a Repository Variable `API_URL` do repo do front, sem efeito no que está no ar. Ver
    [`ingresso-aws.md`](docs/ingresso-aws.md) §11.10.
 7. **Sem WAF e sem rate limiting na borda** — decisão consciente de orçamento, registrada em
    [`ingresso-aws.md`](docs/ingresso-aws.md) §11.6. O CloudFront traz Shield Standard de graça (L3/L4),

@@ -10,7 +10,7 @@ sistema acessível na internet, com TLS válido, **sem comprar domínio** e **se
 > **Montagem escolhida:** CloudFront → Caddy (HTTP) na instância — a primeira das três da
 > [`arquitetura-aws.md`](./arquitetura-aws.md) §10.
 > **Pré-requisitos já cumpridos:** front no ar (`cronos-front`, porta 3000 do host), API
-> (`cronos-app`, porta 3001), Postgres (`cronos-data`). Ver [`front-aws.md`](./front-aws.md).
+> (`cronos-app`, porta 8080 — `3001` até 21/08/2026), Postgres (`cronos-data`). Ver [`front-aws.md`](./front-aws.md).
 > **Ordem em relação à Fase 6:** invertida de propósito — o Caddy só existe para fazer proxy ao
 > front, e subir a borda antes do destino seria montar um proxy sem para onde apontar.
 > **Convenção:** o ID da conta aparece como `<conta>`; segredos, como `<...>`. O repositório é
@@ -61,7 +61,7 @@ o auto-atribuído. Trocar o IP efêmero por um EIP é neutro na fatura e compra 
 A §10 do documento de arquitetura lista três entradas HTTPS possíveis. A escolhida é a primeira:
 
 ```
-Internet ──HTTPS──▶ CloudFront ──HTTP──▶ Caddy :80 ──▶ front :3000 ──▶ api :3001
+Internet ──HTTPS──▶ CloudFront ──HTTP──▶ Caddy :80 ──▶ front :3000 ──▶ api :8080
                     (TLS grátis)         (instância)
 ```
 
@@ -754,23 +754,27 @@ o Route Handler (Abordagem B), que unifica os três consumidores de `API_URL` em
 > §11.1 (o `Caddyfile` não é versionado e não sobrevive à troca da instância), colocar roteamento
 > crítico de aplicação nele aumentaria a dívida em vez de reduzi-la.
 
-### 11.10 A porta da API (`3001`) confunde com a do front (`3000`)
+### 11.10 ~~A porta da API (`3001`) confunde com a do front (`3000`)~~ — concluído em 21/08/2026
 
-Um dígito de diferença, em `curl`, log, Security Group e task definition. Padronizar a API em `8080`
-elimina a ambiguidade. **Não há ganho técnico** — é legibilidade operacional, e por isso não tem
-urgência nem risco associado a adiar.
+Um dígito de diferença, em `curl`, log, Security Group e task definition, confundia. A API foi
+padronizada em `8080` em toda a stack — código e infra AWS.
 
-Custo levantado: ~~6 arquivos de código~~ (5 no repo da API, o `docker-compose.yml` deste — **os 6 já
-usam `8080`**, ver [`docker-e-arquitetura.md`](./docker-e-arquitetura.md) §1 e §3) e 3 mudanças de
-infra — regra do Security Group, revisão da `cronos-app`, revisão da `cronos-front` — **ainda
-pendentes**, feitas à mão no console AWS. O repo do front não tem **nenhum** arquivo a mudar: só o
-valor da Repository Variable `API_URL`, também pendente. Detalhamento em
+O que mudou: os 6 arquivos de código (5 no repo da API, o `docker-compose.yml` deste — ver
+[`docker-e-arquitetura.md`](./docker-e-arquitetura.md) §1 e §3) e as 3 mudanças de infra — regra
+`sgr-04c9035aa035646bc` liberando `8080` no Security Group `sg-00efb499bdaa6fb2a` (mesmo CIDR
+`172.31.0.0/16` da regra antiga — a inconsistência CIDR-vs-*self-reference* **não foi corrigida
+aqui**, só migrou de porta, ver [`banco-de-dados-aws.md`](./banco-de-dados-aws.md) §6),
+`cronos-app:2` (`PORT=8080`, `portMappings` `8080:8080`) e `cronos-front:3`
+(`API_URL=http://api:8080`). A ordem seguida foi a documentada: abrir `8080` → deployar API → deployar
+front → remover a regra da `3001`. Verificado via SSM: `curl localhost:8080/health` e um
+`fetch('http://api:8080/health')` de dentro do container do front — os dois OK.
+
+O repo do front não teve nenhum arquivo a mudar — só a Repository Variable `API_URL`, que **segue em
+`http://api:3001`** até aquele repositório também ser atualizado. Sem efeito no que está no ar: essa
+variável só importa pro build da imagem publicada no GHCR, que este ambiente não consome (ver nota de
+precisão em [`docker-e-arquitetura.md`](./docker-e-arquitetura.md) §3.1). Detalhamento em
 [`problema-rewrite-api-build-time.md`](../../sistema-controle-despesas-front/docs/problema-rewrite-api-build-time.md)
 §14.4.
-
-**A ordem importa**, porque a porta muda dos dois lados: Security Group liberando **as duas** portas →
-API → front → remover a regra da `3001`. Sem isso há uma janela em que o front aponta para a porta
-velha.
 
 ---
 
