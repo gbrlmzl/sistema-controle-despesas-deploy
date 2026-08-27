@@ -130,6 +130,23 @@ jobs:
         if: failure()
         run: docker compose logs
 
+      # Sem isso, uma falha só diz "o spec não passou" — os screenshots (e
+      # vídeos, se o cypress.config estiver com video: true) são o que
+      # distingue timeout puro, erro devolvido pela API, ou o front sem
+      # conseguir falar com a API (cai num error boundary com o texto "Não
+      # foi possível carregar esta página"). Ficam só no runner e somem
+      # quando o job termina se não forem subidos como artefato.
+      - name: Upload de evidências de falha do Cypress
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-failure-evidence
+          path: |
+            front/cypress/screenshots
+            front/cypress/videos
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Derrubar a stack
         if: always()
         run: docker compose down -v
