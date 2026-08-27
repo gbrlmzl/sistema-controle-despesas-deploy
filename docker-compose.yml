@@ -52,11 +52,18 @@ services:
       retries: 10
       start_period: 15s
 
-  # Buildada a partir do código-fonte (não da imagem publicada no GHCR): o
-  # Next.js resolve o destino do rewrite /api/* -> API_URL em build-time (ver
-  # comentário no Dockerfile do front), então a imagem publicada carrega um
-  # placeholder que não aponta pro serviço "api" desta rede. Builda aqui,
-  # apontando pro host certo, é a única forma de o proxy funcionar de verdade.
+  # Buildada a partir do código-fonte (não da imagem publicada no GHCR).
+  # Isso já não é por causa de resolução em build-time: desde 20/08/2026 o
+  # rewrite /api/* -> API_URL saiu do next.config.ts e virou o Route Handler
+  # em src/app/api/[...path]/route.ts, que lê process.env.API_URL a cada
+  # requisição (mesmo padrão em src/lib/apiClient.ts e src/proxy.ts) — a
+  # imagem publicada já aceita apontar pro serviço "api" desta rede em
+  # runtime. Continua buildando aqui porque a imagem do front no GHCR ainda
+  # não é multi-arch (só linux/arm64, como a da API): consumi-la sob QEMU só
+  # trocaria a emulação de lugar. Quando ela publicar amd64 também, dá pra
+  # trocar para `image: .../sistema-controle-despesas-front:${FRONT_IMAGE_TAG:-latest}`
+  # com API_URL: http://api:8080 em runtime, fechando "build once, promote
+  # everywhere" pro front do mesmo jeito que já vale pra API.
   front:
     build:
       context: ${FRONT_CONTEXT:-../sistema-controle-despesas-front}
