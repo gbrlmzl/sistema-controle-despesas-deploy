@@ -40,6 +40,31 @@ services:
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (mínimo 32 caracteres) — ver .env.example}
       JWT_EXPIRES_IN: 15m
       REFRESH_TOKEN_EXPIRES_IN: 7d
+      # SEC-01 -> Tetos dos rate limiters da API, afrouxados só para esta stack.
+      #
+      # A API sobe com NODE_ENV=production de propósito (é a configuração que este e2e
+      # existe pra validar), e nesse ambiente o RATE_LIMIT_DISABLED dela é ignorado de
+      # propósito — ver src/config/env.ts no repo da API. E o navegador nunca fala com a
+      # API direto: tudo passa pelo Route Handler do front
+      # (front/src/app/api/[...path]/route.ts), então a suíte inteira se reparte em dois
+      # IPs só — o gateway da rede, que o Next repassa no X-Forwarded-For das chamadas
+      # vindas do navegador, e o próprio container do front nas chamadas server-side
+      # dele (o proxy.ts renova a sessão a cada request). Dois baldes para 17 specs.
+      #
+      # Medido numa execução de controle desta stack, com os padrões: 45 respostas 429,
+      # sendo 10 no registro (teto de 10/h — o 11º cy.cadastrarUsuario() é barrado), 21
+      # no refresh (teto de 30/15min) e 14 no teto global (120/min). Resultado: 11 dos
+      # 17 specs falhando, a maioria em /register. Com os valores abaixo, 20/20 passam.
+      #
+      # Trocar o número, e não desarmar: os limitadores continuam montados nas rotas e
+      # o e2e continua atravessando o middleware de verdade. Desarmá-los exigiria rodar
+      # a API fora de produção, que é exatamente o que este job não pode fazer.
+      RATE_LIMIT_GLOBAL: 5000
+      RATE_LIMIT_LOGIN: 500
+      RATE_LIMIT_REGISTER: 500
+      RATE_LIMIT_REFRESH: 500
+      RATE_LIMIT_FORGOT_PASSWORD: 500
+      RATE_LIMIT_RESET_PASSWORD: 500
     ports:
       - "8080:8080"
     depends_on:

@@ -328,6 +328,12 @@ environment:
   JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env (mínimo 32 caracteres) — ver .env.example}
   JWT_EXPIRES_IN: 15m
   REFRESH_TOKEN_EXPIRES_IN: 7d
+  RATE_LIMIT_GLOBAL: 5000
+  RATE_LIMIT_LOGIN: 500
+  RATE_LIMIT_REGISTER: 500
+  RATE_LIMIT_REFRESH: 500
+  RATE_LIMIT_FORGOT_PASSWORD: 500
+  RATE_LIMIT_RESET_PASSWORD: 500
 depends_on: { migrate: { condition: service_completed_successfully } }
 healthcheck: [node -e "fetch('http://localhost:8080/health')..."]
 ```
@@ -337,6 +343,15 @@ Consome a **imagem publicada no GHCR**, não builda do código-fonte. Como a API
 A sintaxe **`${JWT_SECRET:?mensagem}`** é uma variável obrigatória: se estiver vazia ou ausente, o `docker compose` aborta imediatamente com essa mensagem, em vez de subir uma API com um segredo em branco.
 
 `FRONTEND_URL: http://localhost:3000` é a origem que a API aceita em CORS e para onde redireciona após o login Google. É `localhost` porque é a URL vista pelo **navegador** (ou pelo Cypress), não a vista de dentro da rede do compose.
+
+Os **`RATE_LIMIT_*`** afrouxam os tetos dos limitadores da API (SEC-01) só nesta stack. Eles existem por causa de duas propriedades desta orquestração que se somam:
+
+- a API roda com `NODE_ENV: production` de propósito — é a configuração que este e2e existe para validar —, e nesse ambiente o `RATE_LIMIT_DISABLED` da API é ignorado por decisão de segurança (um interruptor que desliga proteção não pode depender de ninguém ter copiado a variável errada para um servidor);
+- o navegador nunca fala com a API diretamente: tudo passa pelo Route Handler do front, então a suíte inteira se reparte em **dois IPs** — o gateway da rede, que o Next repassa no `X-Forwarded-For` das chamadas vindas do navegador, e o container do front nas chamadas server-side dele (o `proxy.ts` renova a sessão a cada request). Dois baldes de rate limit para 17 specs.
+
+Medido numa execução de controle desta stack, com os padrões: **45 respostas `429`** — 10 no registro (teto de 10/h, ou seja, o 11º `cy.cadastrarUsuario()` é barrado), 21 no refresh (30/15min) e 14 no teto global (120/min). Onze dos 17 specs falham, a maioria em `/register`, e a suíte passa a testar o limitador em vez das telas. O que estas variáveis trocam é o **número**, nunca o middleware: os limitadores continuam montados nas rotas e o e2e continua atravessando o caminho real. E como qualquer desvio do padrão vira um evento `rate_limit_override` no log de boot da API, um afrouxamento que vaze para produção é alarmável — ao contrário de um limitador desarmado, cujo código simplesmente não roda.
+
+> **Nota (28/08/2026):** antes disso, 12 dos 17 specs falhavam neste job enquanto passavam localmente no repo do front — lá a API roda em `development` com `RATE_LIMIT_DISABLED=true`. A falha aparecia como `expected '/' , actual '/register'`, que parece um problema de navegação e não de `429`.
 
 O `healthcheck` no nível do compose replica o que já existe como `HEALTHCHECK` no Dockerfile, sobrescrevendo-o com intervalos mais agressivos (5s) adequados a CI — é ele que o `docker compose up --wait` observa.
 
