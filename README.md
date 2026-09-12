@@ -34,17 +34,24 @@ Os specs em si continuam vivendo no repo do front ([`sistema-controle-despesas-f
 
 ## Rodando localmente
 
-Pré-requisito: este repositório precisa estar clonado como **irmão** de `sistema-controle-despesas-front` (mesmo diretório pai) — é assim que o `docker-compose.yml` encontra o código-fonte do front pra buildar:
-
+```bash
+cp .env.example .env   # preencha JWT_SECRET (ver instrução no arquivo)
+docker compose up -d --wait
 ```
-Projetos/
-├── sistema-controle-despesas-front/
-└── sistema-controle-despesas-deploy/   (este repo)
+
+Isso sobe a stack completa com as imagens publicadas no GHCR (API e front), nas tags resolvidas por
+`API_IMAGE_TAG`/`FRONT_IMAGE_TAG` do `.env`.
+
+Para iterar no front sem publicar imagem, suba só o Postgres e a API aqui e rode o front direto do
+código-fonte, no repositório dele:
+
+```bash
+docker compose up -d postgres api
 ```
 
 ```bash
-cp .env.example .env   # preencha JWT_SECRET (ver instrução no arquivo)
-docker compose up -d --build --wait
+cd ../sistema-controle-despesas-front
+npm run dev
 ```
 
 Depois, rode os specs a partir do repo do front, apontando pro front orquestrado:
@@ -102,7 +109,7 @@ Os CIs do front e da API disparam um `repository_dispatch` contra este repo (`gb
 | `POSTGRES_PORT` | Porta exposta no host (default `5432` — mude se já tiver um Postgres local rodando nela). |
 | `JWT_SECRET` | **Obrigatória.** Mínimo 32 caracteres — a API não sobe sem ela. |
 | `API_IMAGE_TAG` | Tag da imagem da API a puxar do GHCR (default `latest`). |
-| `FRONT_CONTEXT` | Caminho do código-fonte do front pro build (default `../sistema-controle-despesas-front`; no CI vira `./front`). |
+| `FRONT_IMAGE_TAG` | Tag da imagem do front a puxar do GHCR (default `stable`). |
 
 ## Documentação da infra AWS
 

@@ -77,23 +77,24 @@ services:
       retries: 10
       start_period: 15s
 
-  # Buildada a partir do código-fonte (não da imagem publicada no GHCR).
-  # Isso já não é por causa de resolução em build-time: desde 20/08/2026 o
-  # rewrite /api/* -> API_URL saiu do next.config.ts e virou o Route Handler
-  # em src/app/api/[...path]/route.ts, que lê process.env.API_URL a cada
-  # requisição (mesmo padrão em src/lib/apiClient.ts e src/proxy.ts) — a
-  # imagem publicada já aceita apontar pro serviço "api" desta rede em
-  # runtime. Continua buildando aqui porque a imagem do front no GHCR ainda
-  # não é multi-arch (só linux/arm64, como a da API): consumi-la sob QEMU só
-  # trocaria a emulação de lugar. Quando ela publicar amd64 também, dá pra
-  # trocar para `image: .../sistema-controle-despesas-front:${FRONT_IMAGE_TAG:-latest}`
-  # com API_URL: http://api:8080 em runtime, fechando "build once, promote
-  # everywhere" pro front do mesmo jeito que já vale pra API.
+  # Imagem publicada pelo CI do repo do front (ghcr.io) — não builda do
+  # código-fonte aqui. O endereço da API não fica congelado nela: desde
+  # 20/08/2026 o rewrite /api/* -> API_URL saiu do next.config.ts e virou o
+  # Route Handler em src/app/api/[...path]/route.ts, que lê process.env.API_URL
+  # a cada requisição (mesmo padrão em src/lib/apiClient.ts e src/proxy.ts) —
+  # apontar pro serviço "api" desta rede é trabalho de runtime, feito no
+  # `environment` abaixo.
+  #
+  # O que destravou a troca foi a imagem do front passar a publicar manifest
+  # multi-arch. Enquanto era linux/arm64 puro, consumi-la num runner amd64
+  # rodaria o Next inteiro sob QEMU e só trocaria a emulação de lugar — por
+  # isso o build a partir do fonte sobreviveu até aqui. O custo dele era
+  # silencioso: o Cypress validava um binário e o job `promote` marcava outro
+  # como :stable, dois artefatos do mesmo commit. Agora o artefato testado e o
+  # promovido são o mesmo objeto, fechando "build once, promote everywhere" pro
+  # front do mesmo jeito que já valia pra API.
   front:
-    build:
-      context: ${FRONT_CONTEXT:-../sistema-controle-despesas-front}
-      args:
-        API_URL: http://api:8080
+    image: ${FRONT_IMAGE:-ghcr.io/gbrlmzl/sistema-controle-despesas-front}:${FRONT_IMAGE_TAG:-stable}
     environment:
       NODE_ENV: production
       API_URL: http://api:8080
