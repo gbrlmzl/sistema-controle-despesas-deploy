@@ -21,10 +21,14 @@ on:
         description: "Branch/SHA do front a testar"
         required: false
         default: main
+      front_image_tag:
+        description: "Tag da imagem do front (GHCR) a testar"
+        required: false
+        default: stable
       api_image_tag:
         description: "Tag da imagem da API (GHCR) a testar"
         required: false
-        default: latest
+        default: stable
   repository_dispatch:
     types: [front-published, api-published]
 
@@ -47,25 +51,30 @@ jobs:
           DISPATCH_SHA: ${{ github.event.client_payload.sha }}
           DISPATCH_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
           INPUT_FRONT_REF: ${{ inputs.front_ref }}
+          INPUT_FRONT_IMAGE_TAG: ${{ inputs.front_image_tag }}
           INPUT_API_IMAGE_TAG: ${{ inputs.api_image_tag }}
         run: |
           case "${{ github.event_name }}" in
             repository_dispatch)
               if [ "${{ github.event.action }}" = "front-published" ]; then
-                echo "front_ref=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
-                echo "api_image_tag=latest" >> "$GITHUB_OUTPUT"
+                echo "front_ref=$DISPATCH_SHA"             >> "$GITHUB_OUTPUT"
+                echo "front_image_tag=$DISPATCH_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+                echo "api_image_tag=stable"                >> "$GITHUB_OUTPUT"
               else
-                echo "front_ref=main" >> "$GITHUB_OUTPUT"
-                echo "api_image_tag=$DISPATCH_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+                echo "front_ref=main"                      >> "$GITHUB_OUTPUT"
+                echo "front_image_tag=stable"              >> "$GITHUB_OUTPUT"
+                echo "api_image_tag=$DISPATCH_IMAGE_TAG"   >> "$GITHUB_OUTPUT"
               fi
               ;;
             workflow_dispatch)
               echo "front_ref=$INPUT_FRONT_REF" >> "$GITHUB_OUTPUT"
+              echo "front_image_tag=$INPUT_FRONT_IMAGE_TAG" >> "$GITHUB_OUTPUT"
               echo "api_image_tag=$INPUT_API_IMAGE_TAG" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "front_ref=main" >> "$GITHUB_OUTPUT"
-              echo "api_image_tag=latest" >> "$GITHUB_OUTPUT"
+              echo "front_image_tag=stable" >> "$GITHUB_OUTPUT"
+              echo "api_image_tag=stable" >> "$GITHUB_OUTPUT"
               ;;
           esac
 
@@ -85,6 +94,7 @@ jobs:
           POSTGRES_DB=sistema_despesas_e2e
           JWT_SECRET=$(openssl rand -hex 32)
           API_IMAGE_TAG=${{ steps.params.outputs.api_image_tag }}
+          FRONT_IMAGE_TAG=${{ steps.params.outputs.front_image_tag }}
           EOF
 
       # O pacote ghcr.io/gbrlmzl/sistema-controle-despesas-api é privado — sem
@@ -107,9 +117,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Subir a stack (postgres + api + front) e aguardar health
-        env:
-          FRONT_CONTEXT: ./front
-        run: docker compose up -d --build --wait
+        run: docker compose up -d --wait
 
       - name: Configurar Node
         uses: actions/setup-node@v4
