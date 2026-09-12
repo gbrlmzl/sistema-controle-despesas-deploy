@@ -193,6 +193,10 @@ jobs:
             --tag ghcr.io/gbrlmzl/sistema-controle-despesas-api:stable \
             "ghcr.io/gbrlmzl/sistema-controle-despesas-api:$IMAGE_TAG"
 
+          docker buildx imagetools create \
+            --tag ghcr.io/gbrlmzl/sistema-controle-despesas-api-migrate:stable \
+            "ghcr.io/gbrlmzl/sistema-controle-despesas-api-migrate:$IMAGE_TAG"
+
       - name: Promover imagem do front (tag testada -> :stable)
         if: github.event.action == 'front-published'
         env:
