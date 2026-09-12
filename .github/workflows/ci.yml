@@ -205,3 +205,151 @@ jobs:
           docker buildx imagetools create \
             --tag ghcr.io/gbrlmzl/sistema-controle-despesas-front:stable \
             "ghcr.io/gbrlmzl/sistema-controle-despesas-front:$IMAGE_TAG"
+
+  mirror:
+    name: Espelhar imagem aprovada no ECR
+    needs: promote
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Normalizar a tag imutável
+        id: tag
+        env:
+          DISPATCH_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+        run: echo "image_tag=$DISPATCH_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PROMOTE_TOKEN }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-mirror
+          aws-region: us-east-2
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # imagetools copia manifesto e camadas entre registries diferentes sem
+      # materializar a imagem no runner. Duas tags no destino: a de SHA, que é
+      # imutável e vai para a task definition, e :stable, que é só um rótulo
+      # legível de "o que está aprovado agora".
+      - name: Espelhar API (+ migrate)
+        if: github.event.action == 'api-published'
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.tag.outputs.image_tag }}
+        run: |
+          for repo in sistema-controle-despesas-api sistema-controle-despesas-api-migrate; do
+            dest="${repo/sistema-controle-despesas/sistema-despesas}"
+            docker buildx imagetools create \
+              --tag "$REG/$dest:$TAG" \
+              --tag "$REG/$dest:stable" \
+              "ghcr.io/gbrlmzl/$repo:stable"
+          done
+
+      - name: Espelhar front
+        if: github.event.action == 'front-published'
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.tag.outputs.image_tag }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$REG/sistema-despesas-front:$TAG" \
+            --tag "$REG/sistema-despesas-front:stable" \
+            "ghcr.io/gbrlmzl/sistema-controle-despesas-front:stable"
+
+  deploy:
+    name: Deploy em producao
+    needs: mirror
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: us-east-2
+      CLUSTER: ec2-sistema-despesas
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-deploy
+          aws-region: us-east-2
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # A fonte da verdade da task definition continua sendo a AWS: baixa a
+      # revisão ativa, troca só o campo "image" do container, registra. Os
+      # campos removidos pelo "del" são read-only — register-task-definition
+      # rejeita o JSON se eles vierem junto.
+      - name: Registrar revisao nova
+        id: td
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ needs.mirror.outputs.image_tag }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          if [ "$ACTION" = "api-published" ]; then
+            FAMILY=cronos-app;   CONTAINER=api;   REPO=sistema-despesas-api
+          else
+            FAMILY=cronos-front; CONTAINER=front; REPO=sistema-despesas-front
+          fi
+          echo "family=$FAMILY" >> "$GITHUB_OUTPUT"
+
+          aws ecs describe-task-definition --task-definition "$FAMILY" \
+            --query taskDefinition > td.json
+
+          jq --arg img "$REG/$REPO:$TAG" --arg c "$CONTAINER" '
+            (.containerDefinitions[] | select(.name == $c) | .image) = $img
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
+          ' td.json > td-new.json
+
+          ARN=$(aws ecs register-task-definition --cli-input-json file://td-new.json \
+                  --query "taskDefinition.taskDefinitionArn" --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "Revisao registrada: $ARN"
+
+      # Migration só quando a API mudou, e sempre ANTES do update-service — é a
+      # tradução do depends_on: service_completed_successfully do compose.
+      - name: Aplicar migrations
+        if: github.event.action == 'api-published'
+        env:
+          TD: ${{ steps.td.outputs.arn }}
+        run: |
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TD" --launch-type EC2 \
+            --overrides '{"containerOverrides":[{"name":"api","command":["npx","prisma","migrate","deploy"]}]}' \
+            --query "tasks[0].taskArn" --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
+                   --query "tasks[0].containers[0].exitCode" --output text)
+          echo "migrate exitCode=$CODE"
+          [ "$CODE" = "0" ] || { aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK"; exit 1; }
+
+      - name: Atualizar o service
+        env:
+          FAMILY: ${{ steps.td.outputs.family }}
+          TD: ${{ steps.td.outputs.arn }}
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$FAMILY" --task-definition "$TD"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$FAMILY"
+
+      - name: Eventos do service (se algo falhar)
+        if: failure()
+        env:
+          FAMILY: ${{ steps.td.outputs.family }}
+        run: aws ecs describe-services --cluster "$CLUSTER" --services "$FAMILY" --query "services[].events[:15]"
