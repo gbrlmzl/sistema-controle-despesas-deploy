@@ -326,14 +326,28 @@ jobs:
 
       # Migration só quando a API mudou, e sempre ANTES do update-service — é a
       # tradução do depends_on: service_completed_successfully do compose.
+      # Roda numa família própria (cronos-migrate) derivada da revisão recém-registrada:
+      # a cronos-app publica hostPort 8080, que a API antiga ainda ocupa, e o override
+      # do run-task não consegue tirar portMappings (o ECS devolveria RESOURCE:PORTS).
       - name: Aplicar migrations
         if: github.event.action == 'api-published'
-        env:
-          TD: ${{ steps.td.outputs.arn }}
         run: |
-          TASK=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TD" --launch-type EC2 \
-            --overrides '{"containerOverrides":[{"name":"api","command":["npx","prisma","migrate","deploy"]}]}' \
-            --query "tasks[0].taskArn" --output text)
+          jq '
+            .family = "cronos-migrate"
+            | (.containerDefinitions[] | select(.name == "api"))
+              |= (del(.portMappings, .healthCheck) | .command = ["npx","prisma","migrate","deploy"])
+          ' td-new.json > td-migrate.json
+
+          TD=$(aws ecs register-task-definition --cli-input-json file://td-migrate.json \
+                 --query "taskDefinition.taskDefinitionArn" --output text)
+          echo "Migration com: $TD"
+
+          OUT=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TD" --launch-type EC2 \
+            --output json)
+          # run-task não falha quando não consegue alocar a task: devolve tasks=[] e o
+          # motivo em failures (ex.: RESOURCE:MEMORY). Sem isso o wait recebe "None".
+          TASK=$(echo "$OUT" | jq -r '.tasks[0].taskArn // empty')
+          [ -n "$TASK" ] || { echo "run-task nao iniciou a migration:"; echo "$OUT" | jq '.failures'; exit 1; }
           aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
           CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
                    --query "tasks[0].containers[0].exitCode" --output text)
