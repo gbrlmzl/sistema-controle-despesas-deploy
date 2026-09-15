@@ -1,0 +1,345 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1186" viewBox="0 0 1600 1186" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/>
+    </marker>
+    <marker id="arrowSlate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+    </marker>
+    <style>
+      .h1   { font-size: 25px; font-weight: 700; fill: #0f172a; }
+      .sub  { font-size: 13px; fill: #5b6472; }
+      .plbl { font-size: 13.5px; font-weight: 700; fill: #0f172a; letter-spacing: .3px; }
+      .bt   { font-size: 12.5px; font-weight: 700; fill: #0f172a; }
+      .bl   { font-size: 10.6px; fill: #475569; }
+      .blb  { font-size: 10.6px; fill: #0f172a; font-weight: 600; }
+      .mono { font-size: 10px; fill: #475569; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .chip { font-size: 9.5px; font-weight: 600; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .div  { font-size: 10px; fill: #64748b; font-style: italic; }
+      .alab { font-size: 10px; font-weight: 600; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .note { font-size: 11px; fill: #475569; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1186" fill="#ffffff"/>
+
+  <!-- ================= HEADER ================= -->
+  <text class="h1" x="40" y="44">CRONOS — Pipeline CI/CD dos três repositórios</text>
+  <text class="sub" x="1560" y="44" text-anchor="end">estado em 14/09/2026</text>
+  <text class="sub" x="40" y="68">Cada repositório valida a si mesmo (lint · testes · build) e publica sua imagem no GHCR; só então dispara o orquestrador, que roda o E2E do sistema completo, promove o artefato e faz o deploy na AWS.</text>
+
+  <!-- ================= 1 · CI DA API ================= -->
+  <rect x="40" y="96" width="520" height="420" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="96" width="5" height="420" rx="2.5" fill="#2563eb"/>
+  <text class="plbl" x="64" y="124">1 · CI da API</text>
+  <text class="mono" x="64" y="141">sistema-controle-despesas-api</text>
+  <text class="bl" x="536" y="124" text-anchor="end">gatilho: pull_request e push na main</text>
+
+  <!-- lint -->
+  <rect x="64" y="156" width="150" height="64" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="76" y="176">lint</text>
+  <text class="bl" x="76" y="193">Biome (biome ci)</text>
+  <text class="bl" x="76" y="208">formatação · imports</text>
+
+  <!-- test -->
+  <rect x="226" y="156" width="310" height="64" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="238" y="176">test</text>
+  <text class="bl" x="238" y="193">Postgres 17 (service) · prisma migrate deploy · tsc</text>
+  <text class="bl" x="238" y="208">Jest: testes unitários + integração (supertest)</text>
+
+  <line x1="139" y1="220" x2="139" y2="240" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="381" y1="220" x2="381" y2="240" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- build -->
+  <rect x="64" y="242" width="472" height="50" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="76" y="262">build (matrix)</text>
+  <text class="bl" x="176" y="262">needs: lint + test</text>
+  <text class="bl" x="76" y="280">docker compose --profile prod build → imagens api + migrate (artifact)</text>
+  <rect x="352" y="251" width="72" height="16" rx="8" fill="#dbeafe"/>
+  <text class="chip" x="388" y="262" text-anchor="middle" fill="#1d4ed8">amd64</text>
+  <rect x="430" y="251" width="96" height="16" rx="8" fill="#dbeafe"/>
+  <text class="chip" x="478" y="262" text-anchor="middle" fill="#1d4ed8">arm64 (QEMU)</text>
+
+  <line x1="300" y1="292" x2="300" y2="312" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- smoke test -->
+  <rect x="64" y="314" width="472" height="50" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="76" y="334">smoke-test</text>
+  <text class="bl" x="76" y="352">sobe a stack prod (imagem amd64 + Postgres) e aguarda GET /health</text>
+
+  <!-- divider -->
+  <text class="div" x="64" y="385">PR termina aqui · abaixo, só push na main</text>
+  <line x1="276" y1="381" x2="536" y2="381" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <line x1="300" y1="364" x2="300" y2="394" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- publish -->
+  <rect x="64" y="396" width="472" height="50" rx="7" fill="#eff6ff" stroke="#2563eb" stroke-width="1.3"/>
+  <text class="bt" x="76" y="416">publish → GHCR</text>
+  <text class="bl" x="76" y="434">push por arquitetura → manifest multi-arch :&lt;sha12&gt; + :latest (api e migrate)</text>
+
+  <line x1="150" y1="446" x2="150" y2="460" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- dispatch -->
+  <rect x="64" y="462" width="472" height="42" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text class="bt" x="76" y="479">dispatch</text>
+  <text class="mono" x="76" y="495">repository_dispatch: api-published { image_tag: &lt;sha12&gt; }</text>
+
+  <!-- ================= 2 · CI DO FRONT ================= -->
+  <rect x="1040" y="96" width="520" height="420" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="1040" y="96" width="5" height="420" rx="2.5" fill="#7c3aed"/>
+  <text class="plbl" x="1064" y="124">2 · CI do front</text>
+  <text class="mono" x="1064" y="141">sistema-controle-despesas-front</text>
+  <text class="bl" x="1536" y="124" text-anchor="end">gatilho: pull_request e push na main</text>
+
+  <!-- lint -->
+  <rect x="1064" y="156" width="150" height="64" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="1076" y="176">lint</text>
+  <text class="bl" x="1076" y="193">ESLint</text>
+  <text class="bl" x="1076" y="208">next/core-web-vitals</text>
+
+  <!-- test -->
+  <rect x="1226" y="156" width="310" height="64" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="1238" y="176">test</text>
+  <text class="bl" x="1238" y="193">Jest + Testing Library (jsdom)</text>
+  <text class="bl" x="1238" y="208">relatório de cobertura (--coverage --ci)</text>
+
+  <line x1="1139" y1="220" x2="1139" y2="240" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="1381" y1="220" x2="1381" y2="240" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- build -->
+  <rect x="1064" y="242" width="472" height="50" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="1076" y="262">build</text>
+  <text class="bl" x="1076" y="280">next build de produção (API_URL placeholder — o endereço real vem em runtime)</text>
+
+  <!-- sem smoke -->
+  <rect x="1064" y="314" width="372" height="50" rx="7" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 3"/>
+  <text class="bt" x="1076" y="334" fill="#64748b">sem smoke test da imagem</text>
+  <text class="bl" x="1076" y="352">a imagem Docker só é buildada após o merge</text>
+
+  <!-- divider -->
+  <text class="div" x="1064" y="385">PR termina aqui · abaixo, só push na main</text>
+  <line x1="1276" y1="381" x2="1536" y2="381" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <line x1="1486" y1="292" x2="1486" y2="394" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- docker-publish -->
+  <rect x="1064" y="396" width="472" height="50" rx="7" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.3"/>
+  <text class="bt" x="1076" y="416">docker-publish → GHCR</text>
+  <text class="bl" x="1076" y="434">buildx linux/amd64 + linux/arm64 → :latest · :sha-&lt;sha&gt; (cache GHA)</text>
+
+  <line x1="1300" y1="446" x2="1300" y2="460" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- dispatch -->
+  <rect x="1064" y="462" width="472" height="42" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text class="bt" x="1076" y="479">dispatch</text>
+  <text class="mono" x="1076" y="495">repository_dispatch: front-published { sha, image_tag: sha-&lt;sha&gt; }</text>
+
+  <!-- ================= LEGENDA (centro, topo) ================= -->
+  <rect x="580" y="96" width="440" height="214" rx="10" fill="#ffffff" stroke="#dbe1ea"/>
+  <text class="plbl" x="600" y="122">Legenda</text>
+
+  <line x1="600" y1="146" x2="646" y2="146" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text class="bl" x="658" y="150">needs: o próximo job só roda se o anterior passar</text>
+
+  <line x1="600" y1="170" x2="646" y2="170" stroke="#0f766e" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowTeal)"/>
+  <text class="bl" x="658" y="174">repository_dispatch: gatilho entre repositórios</text>
+
+  <line x1="600" y1="194" x2="646" y2="194" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+  <text class="bl" x="658" y="198">publicação, re-tag ou cópia de imagem</text>
+
+  <circle cx="623" cy="218" r="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.2"/>
+  <line x1="619.5" y1="214.5" x2="626.5" y2="221.5" stroke="#dc2626" stroke-width="1.5"/>
+  <line x1="626.5" y1="214.5" x2="619.5" y2="221.5" stroke="#dc2626" stroke-width="1.5"/>
+  <text class="bl" x="658" y="222">falha em qualquer etapa interrompe a cadeia</text>
+
+  <rect x="600" y="234" width="50" height="16" rx="8" fill="#fef3c7"/>
+  <text class="chip" x="625" y="245" text-anchor="middle" fill="#92400e">:latest</text>
+  <text class="bl" x="658" y="246">publicado pelo CI, ainda NÃO validado pelo E2E</text>
+
+  <rect x="600" y="258" width="50" height="16" rx="8" fill="#dcfce7"/>
+  <text class="chip" x="625" y="269" text-anchor="middle" fill="#166534">:stable</text>
+  <text class="bl" x="658" y="270">aprovado pelo E2E do sistema completo</text>
+
+  <rect x="600" y="282" width="50" height="16" rx="8" fill="#e2e8f0"/>
+  <text class="chip" x="625" y="293" text-anchor="middle" fill="#334155">:&lt;sha&gt;</text>
+  <text class="bl" x="658" y="294">tag imutável — é a que a task definition usa</text>
+
+  <!-- ================= GHCR (centro) ================= -->
+  <rect x="580" y="326" width="440" height="190" rx="10" fill="#f1f5f9" stroke="#334155" stroke-width="1.4"/>
+  <text class="bt" x="600" y="350">GHCR · ghcr.io/gbrlmzl</text>
+  <text class="bl" x="600" y="366">registry intermediário: toda imagem nasce aqui e só sai aprovada</text>
+
+  <text class="mono" x="600" y="400" fill="#1d4ed8">sistema-controle-despesas-api</text>
+  <rect x="826" y="388" width="60" height="16" rx="8" fill="#e2e8f0"/><text class="chip" x="856" y="399" text-anchor="middle" fill="#334155">:&lt;sha12&gt;</text>
+  <rect x="892" y="388" width="52" height="16" rx="8" fill="#fef3c7"/><text class="chip" x="918" y="399" text-anchor="middle" fill="#92400e">:latest</text>
+  <rect x="950" y="388" width="52" height="16" rx="8" fill="#dcfce7"/><text class="chip" x="976" y="399" text-anchor="middle" fill="#166534">:stable</text>
+
+  <text class="mono" x="600" y="428" fill="#1d4ed8">sistema-controle-despesas-api-migrate</text>
+  <rect x="826" y="416" width="60" height="16" rx="8" fill="#e2e8f0"/><text class="chip" x="856" y="427" text-anchor="middle" fill="#334155">:&lt;sha12&gt;</text>
+  <rect x="892" y="416" width="52" height="16" rx="8" fill="#fef3c7"/><text class="chip" x="918" y="427" text-anchor="middle" fill="#92400e">:latest</text>
+  <rect x="950" y="416" width="52" height="16" rx="8" fill="#dcfce7"/><text class="chip" x="976" y="427" text-anchor="middle" fill="#166534">:stable</text>
+
+  <text class="mono" x="600" y="456" fill="#6d28d9">sistema-controle-despesas-front</text>
+  <rect x="826" y="444" width="60" height="16" rx="8" fill="#e2e8f0"/><text class="chip" x="856" y="455" text-anchor="middle" fill="#334155">:sha-…</text>
+  <rect x="892" y="444" width="52" height="16" rx="8" fill="#fef3c7"/><text class="chip" x="918" y="455" text-anchor="middle" fill="#92400e">:latest</text>
+  <rect x="950" y="444" width="52" height="16" rx="8" fill="#dcfce7"/><text class="chip" x="976" y="455" text-anchor="middle" fill="#166534">:stable</text>
+
+  <line x1="600" y1="474" x2="1000" y2="474" stroke="#cbd5e1" stroke-width="1"/>
+  <text class="bl" x="600" y="492">E2E puxa as imagens daqui · promote re-tagueia :stable</text>
+  <text class="bl" x="600" y="507">mirror copia a imagem aprovada para o ECR</text>
+
+  <!-- setas publish -> GHCR -->
+  <line x1="536" y1="421" x2="578" y2="421" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+  <line x1="1064" y1="421" x2="1022" y2="421" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+
+  <!-- ================= 3 · ORQUESTRADOR ================= -->
+  <rect x="40" y="556" width="1520" height="300" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="556" width="5" height="300" rx="2.5" fill="#0f766e"/>
+  <text class="plbl" x="830" y="584">3 · Repo orquestrador — E2E, promoção e deploy</text>
+  <text class="mono" x="830" y="601">sistema-controle-despesas-deploy</text>
+  <text class="bl" x="1536" y="601" text-anchor="end">gatilhos: repository_dispatch · push/PR na main · workflow_dispatch</text>
+
+  <!-- setas de dispatch (desenhadas antes para ficarem por baixo) -->
+  <line x1="150" y1="504" x2="150" y2="618" stroke="#0f766e" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="158" y="548" fill="#0f766e">api-published</text>
+  <polyline points="1300,504 1300,536 262,536 262,618" fill="none" stroke="#0f766e" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrowTeal)"/>
+  <text class="alab" x="1180" y="531" fill="#0f766e">front-published</text>
+
+  <!-- box 1: resolver gatilho -->
+  <rect x="64" y="620" width="262" height="170" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3"/>
+  <text class="bt" x="76" y="642">resolver gatilho</text>
+  <text class="blb" x="76" y="662">front-published</text>
+  <text class="bl" x="76" y="677">front = imagem nova · api = :stable</text>
+  <text class="blb" x="76" y="697">api-published</text>
+  <text class="bl" x="76" y="712">api = imagem nova · front = :stable</text>
+  <text class="blb" x="76" y="732">push/PR/manual</text>
+  <text class="bl" x="76" y="747">:stable nos dois (ou inputs)</text>
+  <text class="bl" x="76" y="772">+ checkout dos specs Cypress do front</text>
+
+  <!-- box 2: e2e -->
+  <rect x="358" y="620" width="262" height="170" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3"/>
+  <text class="bt" x="370" y="642">e2e (Cypress)</text>
+  <text class="bl" x="370" y="662">login GHCR · .env efêmero (JWT_SECRET)</text>
+  <text class="bl" x="370" y="680">docker compose up --wait:</text>
+  <text class="mono" x="370" y="696">postgres → migrate → api → front</text>
+  <text class="bl" x="370" y="714">healthchecks reais antes dos specs</text>
+  <text class="bl" x="370" y="732">npx cypress run (baseUrl :3000)</text>
+  <text class="bl" x="370" y="750">falha → logs + screenshots/vídeos</text>
+  <text class="bl" x="370" y="772">docker compose down -v (sempre)</text>
+
+  <!-- box 3: promote -->
+  <rect x="652" y="620" width="262" height="170" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3"/>
+  <text class="bt" x="664" y="642">promote</text>
+  <text class="bl" x="664" y="662">só quando o gatilho é repository_dispatch</text>
+  <text class="bl" x="664" y="680">docker buildx imagetools create:</text>
+  <rect x="664" y="688" width="94" height="16" rx="8" fill="#e2e8f0"/><text class="chip" x="711" y="699" text-anchor="middle" fill="#334155">tag testada</text>
+  <text class="bl" x="766" y="700">→</text>
+  <rect x="782" y="688" width="52" height="16" rx="8" fill="#dcfce7"/><text class="chip" x="808" y="699" text-anchor="middle" fill="#166534">:stable</text>
+  <text class="bl" x="664" y="722">api + api-migrate, ou front</text>
+  <text class="bl" x="664" y="740">mesmo manifesto — sem rebuild,</text>
+  <text class="bl" x="664" y="755">sem baixar/reenviar camadas</text>
+
+  <!-- box 4: mirror -->
+  <rect x="946" y="620" width="262" height="170" rx="7" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.3"/>
+  <text class="bt" x="958" y="642">mirror → ECR</text>
+  <text class="bl" x="958" y="662">OIDC · role github-actions-mirror</text>
+  <text class="bl" x="958" y="680">copia GHCR :stable para o ECR</text>
+  <text class="bl" x="958" y="698">com duas tags:</text>
+  <rect x="958" y="706" width="60" height="16" rx="8" fill="#e2e8f0"/><text class="chip" x="988" y="717" text-anchor="middle" fill="#334155">:&lt;sha&gt;</text>
+  <rect x="1024" y="706" width="52" height="16" rx="8" fill="#dcfce7"/><text class="chip" x="1050" y="717" text-anchor="middle" fill="#166534">:stable</text>
+  <text class="bl" x="958" y="740">sem materializar a imagem no runner</text>
+  <text class="bl" x="958" y="755">(só permissão de escrita no ECR)</text>
+
+  <!-- box 5: deploy -->
+  <rect x="1240" y="620" width="296" height="170" rx="7" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+  <text class="bt" x="1252" y="642">deploy (produção)</text>
+  <rect x="1252" y="650" width="220" height="17" rx="8.5" fill="#fde68a"/>
+  <text class="chip" x="1362" y="662" text-anchor="middle" fill="#92400e">environment: production · aprovação</text>
+  <text class="bl" x="1252" y="684">OIDC · role github-actions-deploy</text>
+  <text class="bl" x="1252" y="702">1. registra revisão nova da task definition</text>
+  <text class="bl" x="1252" y="719">2. só API: migration em cronos-migrate (sem portas)</text>
+  <text class="bl" x="1252" y="736">3. aws ecs update-service</text>
+  <text class="bl" x="1252" y="753">4. wait services-stable</text>
+  <text class="bl" x="1252" y="774">concurrency: um deploy por vez</text>
+
+  <!-- setas entre boxes do orquestrador -->
+  <line x1="326" y1="705" x2="356" y2="705" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="620" y1="705" x2="650" y2="705" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="914" y1="705" x2="944" y2="705" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="1208" y1="705" x2="1238" y2="705" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+  <!-- setas GHCR <-> orquestrador (com halo branco sobre a linha de dispatch) -->
+  <line x1="600" y1="516" x2="600" y2="618" stroke="#ffffff" stroke-width="6"/>
+  <line x1="600" y1="516" x2="600" y2="618" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+  <text class="alab" x="530" y="580" fill="#334155">pull</text>
+  <line x1="783" y1="620" x2="783" y2="518" stroke="#ffffff" stroke-width="6"/>
+  <line x1="783" y1="620" x2="783" y2="518" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+  <text class="alab" x="775" y="580" text-anchor="end" fill="#334155">re-tag :stable</text>
+
+  <!-- rodapé do painel -->
+  <text class="note" x="64" y="822">push/PR neste repo ou workflow_dispatch manual → roda só o e2e (valida mudanças no compose).</text>
+  <text class="note" x="64" y="840">promote, mirror e deploy exigem repository_dispatch (um artefato recém-publicado).</text>
+
+  <!-- ================= 4 · AWS ================= -->
+  <rect x="40" y="888" width="1520" height="278" rx="10" fill="#f8fafc" stroke="#dbe1ea"/>
+  <rect x="40" y="888" width="5" height="278" rx="2.5" fill="#b45309"/>
+  <text class="plbl" x="64" y="916">4 · AWS (us-east-2) — produção</text>
+  <text class="mono" x="64" y="933">ECR · ECS on EC2 · cluster ec2-sistema-despesas</text>
+
+  <!-- setas orquestrador -> AWS -->
+  <line x1="1077" y1="790" x2="1077" y2="938" stroke="#334155" stroke-width="2.2" marker-end="url(#arrowSlate)"/>
+  <line x1="1388" y1="790" x2="1388" y2="938" stroke="#b45309" stroke-width="2" marker-end="url(#arrowAmber)"/>
+  <text class="alab" x="1396" y="870" fill="#b45309">update-service</text>
+
+  <!-- proteções -->
+  <rect x="64" y="950" width="846" height="96" rx="7" fill="#ffffff" stroke="#e2c79a"/>
+  <text class="bt" x="80" y="972">Proteções entre a aprovação e o tráfego real</text>
+  <text class="bl" x="80" y="994">• aprovação manual (environment production)</text>
+  <text class="bl" x="80" y="1013">• credenciais temporárias via OIDC — sem chave estática</text>
+  <text class="bl" x="80" y="1032">• duas roles: mirror (só ECR) ≠ deploy (só ECS)</text>
+  <text class="bl" x="490" y="994">• migrations antes do update-service (falha = sem deploy)</text>
+  <text class="bl" x="490" y="1013">• tag imutável: rollback = revisão anterior da task definition</text>
+  <text class="bl" x="490" y="1032">• circuit breaker do ECS com rollback automático</text>
+
+  <!-- ECR -->
+  <rect x="946" y="940" width="262" height="106" rx="7" fill="#fffbeb" stroke="#b45309" stroke-width="1.3"/>
+  <text class="bt" x="958" y="962">Amazon ECR</text>
+  <text class="mono" x="958" y="982">sistema-despesas-api</text>
+  <text class="mono" x="958" y="997">sistema-despesas-api-migrate</text>
+  <text class="mono" x="958" y="1012">sistema-despesas-front</text>
+  <text class="bl" x="958" y="1034">tags :&lt;sha&gt; (imutável) + :stable</text>
+
+  <line x1="1208" y1="993" x2="1238" y2="993" stroke="#334155" stroke-width="2" marker-end="url(#arrowSlate)"/>
+
+  <!-- ECS cluster -->
+  <rect x="1240" y="940" width="296" height="210" rx="7" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/>
+  <text class="bt" x="1252" y="962">ECS · EC2 t4g.small (arm64)</text>
+  <text class="mono" x="1252" y="978">cluster ec2-sistema-despesas</text>
+  <rect x="1252" y="988" width="272" height="24" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+  <text class="bl" x="1262" y="1004">cronos-edge · Caddy (borda)</text>
+  <rect x="1252" y="1018" width="272" height="24" rx="5" fill="#f5f3ff" stroke="#7c3aed"/>
+  <text class="bl" x="1262" y="1034">cronos-front · Next.js</text>
+  <rect x="1252" y="1048" width="272" height="24" rx="5" fill="#eff6ff" stroke="#2563eb"/>
+  <text class="bl" x="1262" y="1064">cronos-app · API (container api)</text>
+  <rect x="1252" y="1078" width="272" height="24" rx="5" fill="#ffffff" stroke="#cbd5e1"/>
+  <text class="bl" x="1262" y="1094">cronos-data · Postgres + volume EBS</text>
+  <rect x="1252" y="1112" width="272" height="24" rx="5" fill="#ffffff" stroke="#2563eb" stroke-dasharray="4 3"/>
+  <text class="bl" x="1262" y="1128">cronos-migrate · run-task avulsa (migration)</text>
+
+  <!-- usuário -> Cloudflare -> cluster -->
+  <rect x="64" y="1068" width="110" height="44" rx="7" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="bt" x="119" y="1095" text-anchor="middle">Usuário</text>
+  <line x1="174" y1="1090" x2="204" y2="1090" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="206" y="1068" width="170" height="44" rx="7" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="bt" x="291" y="1088" text-anchor="middle">Cloudflare</text>
+  <text class="bl" x="291" y="1103" text-anchor="middle">cronos.gabrielmizael.com</text>
+  <line x1="376" y1="1090" x2="1238" y2="1090" stroke="#64748b" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text class="bl" x="400" y="1083">HTTPS (Origin CA + X-Origin-Verify) → Caddy → front / api</text>
+</svg>
